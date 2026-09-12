@@ -13,6 +13,21 @@
     <string name="action_server_settings">修改服务器地址</string>
     <string name="action_test_connection">测试连接</string>
     <string name="action_connect">连接</string>
+    <string name="action_save">保存</string>
+    <string name="action_delete">删除</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_edit">编辑</string>
+
+    <string name="instances_title">实例</string>
+    <string name="instances_subtitle">点选一个实例即可切换，应用会重新加载并连接它。</string>
+    <string name="instances_empty">还没有添加任何后端实例。</string>
+    <string name="instance_add_title">添加实例</string>
+    <string name="instance_edit_title">编辑实例</string>
+    <string name="instance_name_label">名称（可选）</string>
+    <string name="instance_name_help">方便区分的名字，留空则使用主机名。</string>
+    <string name="instance_active">当前使用中</string>
+    <string name="instance_delete_confirm_title">删除这个实例？</string>
+    <string name="instance_delete_confirm_message">只会从本机移除这条记录，不会影响服务器上的任何数据。</string>
 
     <string name="setup_title">连接到 OpenFic</string>
     <string name="setup_subtitle">输入运行 OpenFic 后端的地址。数据全部保存在你自己的服务器上。</string>

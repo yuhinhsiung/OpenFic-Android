@@ -97,26 +97,36 @@ export function ProjectListItem({ project, onEdit, onDelete }: ProjectListItemPr
               {project.description}
             </Text>
           )}
+          {/*
+            Each figure is `nowrap`: as flex items they shrink below their content width,
+            and Chinese text breaks at any character, so the row used to render as
+            "3,113 / 字", "1 / 章", "大约 23 小时 / 前". `wrap` lets the row fall back to two
+            lines at item boundaries when the column is too narrow to hold all three.
+          */}
           <Flex
             gap="3"
             mt="1"
             align="center"
+            wrap="wrap"
           >
             <Text
               size="1"
               color="gray"
+              style={{ whiteSpace: "nowrap" }}
             >
               {project.wordCount.toLocaleString()} {t("projects.words")}
             </Text>
             <Text
               size="1"
               color="gray"
+              style={{ whiteSpace: "nowrap" }}
             >
               {project.chapterCount} {t("projects.chapters")}
             </Text>
             <Text
               size="1"
               color="gray"
+              style={{ whiteSpace: "nowrap" }}
             >
               {formatRelativeTime(project.updatedAt)}
             </Text>

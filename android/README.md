@@ -58,28 +58,43 @@ Windows 上在 PowerShell 或 cmd 里用 `.\gradlew.bat assembleDebug`，效果�
 
 ## 使用
 
-首次启动会进入服务器配置页：
+### 实例管理
 
-1. 填入后端地址，例如 `192.168.1.10:8000`、`nas.local:8000` 或 `https://openfic.example.com`。
-   不写协议时默认按 `http://` 处理。
-2. 点「测试连接」——它会请求 `GET /api/v1/health`（后端上该接口无需鉴权），确认地址可达并显示服务器版本。
-3. 点「连接」。
+安卓端复刻了桌面版的**实例菜单**：可以保存多个后端、随时切换、编辑或删除。入口有两处：
 
-之后可以在两个地方改地址：
-
+- 前端**设置 → 通用 → 后端实例 → 管理实例**
 - 连接失败页上的「修改服务器地址」
-- 前端设置页（`openficAndroidHost` 桥接会调用原生配置页）
+
+首次启动（还没有任何实例时）会直接进入添加实例页。
+
+添加一个实例：
+
+1. **名称**可留空，会默认使用主机名，例如 `nas.local:8000`
+2. 填入后端地址，例如 `192.168.1.10:8000`、`nas.local:8000` 或 `https://openfic.example.com`。
+   不写协议时默认按 `http://` 处理
+3. 点「测试连接」——它请求 `GET /api/v1/health`（后端上该接口无需鉴权），确认可达并显示服务器版本
+4. 保存
+
+列表里点一行即切换到该实例；右侧铅笔图标进入编辑，编辑页底部可以删除。
+
+**切换实例会清空本地缓存并重新加载。** 因为所有实例都从同一个页面来源
+（`appassets.androidplatform.net`）提供服务，而前端把项目标签页、最近项目、未保存的写作缓冲存在
+IndexedDB 里 —— 这些按项目 id 索引，属于**上一个**后端。不清掉就会串数据。
+
+### 从旧版本升级
+
+单个地址的老配置会在首次启动时自动迁移成一个实例，名称取主机名，无需手动重填。
 
 ## 界面来源
 
-配置页可以选界面由谁提供：
+**每个实例单独设置**——因为是否需要它取决于后端自身（是否设了访问密码）：
 
 | 选项 | 说明 |
 | --- | --- |
 | **内置界面**（默认） | 使用 APK 里打包的前端。启动快，后端没有提供静态前端时也能用。**代价**：页面来源与后端跨域，若后端设置了 `OPENFIC_AUTH_PASSWORD`，`SameSite=Lax` 的登录 Cookie 无法附带，会登录不上。 |
 | **服务器界面** | 直接加载后端提供的同一份前端（后端在 `/` 上托管了它）。与后端完全同源，Cookie 正常，界面也随后端更新自动同步。**代价**：首屏需要一次网络往返。 |
 
-默认部署（不带密码的 Docker / `openfic serve`）用「内置界面」即可。**如果你的后端设了访问密码，请选「服务器界面」。**
+默认部署（不带密码的 Docker / `openfic serve`）用「内置界面」即可。**如果某个后端设了访问密码，把那个实例设成「服务器界面」。**
 
 ## 已做的适配
 
@@ -94,10 +109,25 @@ Windows 上在 PowerShell 或 cmd 里用 `.\gradlew.bat assembleDebug`，效果�
 
 ## 对上游前端做的改动
 
-只有两处，都是让前端能识别 Android 宿主：
+**宿主识别**（让前端知道自己在 Android 里）：
 
 - `frontend/src/pwa/register-sw.ts` — 检测到 `openficAndroidHost` 时跳过 Service Worker 注册。资源本来就来自 APK，SW 没有收益，反而会让缓存跨版本残留。
 - `frontend/src/lib/desktop-appearance-bridge.ts` — 新增 `openficAndroidHost` 类型声明，并让三个 `publish*` 函数同时上报给 Android 宿主。
+
+**实例管理入口**：
+
+- `frontend/src/features/settings/components/general-settings.tsx` — 在「通用」设置里加一节「后端实例」，点击调用 `openficAndroidHost.openInstanceManager()`。桌面外壳的实例菜单在窗口 chrome 上，安卓端没有对应位置，所以在设置页给出入口。
+- `frontend/src/i18n/locales/{zh-CN,en}.json` — 对应文案。
+
+**窄屏排版修复**（详见 `MOBILE-LAYOUT-QA.md`）：
+
+- `frontend/src/components/number-flow-safe.tsx`（新增）+ 4 处导入替换 — `@number-flow/react` 依赖 CSS `round()`/`mod()`（Chromium 125+），旧版 WebView 上数字会重叠。不支持时降级为纯文本。
+- `frontend/src/components/title-input.tsx` — 移动端改用自增高 `<textarea>`，文档大标题才能换行。
+- `frontend/src/hooks/use-mobile-viewport.ts`（新增）— 供共用组件匹配 app shell 的移动端断点。
+- `frontend/src/features/projects/components/project-list-item.tsx` — 元信息项加 `nowrap`，不再从词中间断行。
+- `frontend/src/features/world-info/{components/entry-list-item.tsx,pages/world-info-page.css}` — 条目标题移动端两行 + 缩小字号。
+- `frontend/src/features/dashboard/pages/dashboard-page.css` — 移动端统计卡片等宽、日历加滚动提示。
+- `frontend/src/features/assistant/components/assistant-sidebar.css` — 会话标题移动端两行。
 
 ## 目录结构
 
@@ -106,16 +136,18 @@ android/
 ├── app/src/main/
 │   ├── java/com/openfic/android/
 │   │   ├── MainActivity.kt              WebView 宿主：加载、探活、返回键、下载、文件选择
-│   │   ├── ServerSetupActivity.kt       服务器地址配置页
+│   │   ├── InstancesActivity.kt         实例列表：切换 / 添加 / 编辑入口
+│   │   ├── InstanceEditActivity.kt      实例表单：名称、地址、探活、界面来源、删除
 │   │   ├── storage/
-│   │   │   └── AppPreferences.kt        地址与界面来源的持久化
+│   │   │   └── AppPreferences.kt        实例列表与激活项的持久化（含旧配置迁移）
 │   │   └── web/
-│   │       ├── OpenFicAssetHandler.kt   静态资源 + /runtime-config.json 拦截
+│   │       ├── OpenFicAssetHandler.kt   静态资源 + /runtime-config.json + 存储重置页
 │   │       ├── AndroidHostBridge.kt     openficAndroidHost JS 桥接
 │   │       └── BackendProbe.kt          GET /api/v1/health 探活
 │   ├── assets/www/                      前端产物（构建时生成）
 │   └── res/
-└── tools/svg_to_vector.py               品牌 SVG → Android 矢量图标
+├── tools/svg_to_vector.py               品牌 SVG → Android 矢量图标
+└── MOBILE-LAYOUT-QA.md                  窄屏排版问题排查记录与测试方法
 ```
 
 > 这里没有 `data/` 包是有意为之：仓库根目录的 `.gitignore` 里有一条裸的 `data` 规则

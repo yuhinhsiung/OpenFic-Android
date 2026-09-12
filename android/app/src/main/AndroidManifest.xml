@@ -36,10 +36,17 @@
         </activity>
 
         <activity
-            android:name=".ServerSetupActivity"
+            android:name=".InstancesActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode"
             android:exported="false"
             android:parentActivityName=".MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".InstanceEditActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode"
+            android:exported="false"
+            android:parentActivityName=".InstancesActivity"
             android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>

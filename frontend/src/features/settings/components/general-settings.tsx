@@ -4,7 +4,7 @@
  * 通用设置面板，包含语言、主题、字体设置。
  */
 
-import { Box, Flex, Text, TextField, SegmentedControl } from "@radix-ui/themes";
+import { Box, Button, Flex, Text, TextField, SegmentedControl } from "@radix-ui/themes";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -134,6 +134,9 @@ export function GeneralSettings({
 }: GeneralSettingsProps) {
   const { t } = useTranslation();
 
+  // Only the Android shell implements the instance manager.
+  const isAndroidHost = typeof window !== "undefined" && "openficAndroidHost" in window;
+
   /** 更新语言 */
   const handleLanguageChange = (language: string) => {
     onSettingsChange({ ...settings, language: language as LanguageCode });
@@ -244,6 +247,38 @@ export function GeneralSettings({
           onCommit={handleEditorFontSizeCommit}
           disabled={isSaving}
         />
+
+        {/*
+          The desktop shell manages backends from its own "instances" menu in the window
+          chrome. The Android shell has the same list behind a native screen, so expose the
+          entry point here — otherwise it is only reachable when a connection fails.
+        */}
+        {isAndroidHost && (
+          <Flex
+            direction="column"
+            gap="2"
+          >
+            <Text
+              size="2"
+              weight="medium"
+              color="gray"
+            >
+              {t("settings.backendInstances")}
+            </Text>
+            <Button
+              variant="soft"
+              onClick={() => window.openficAndroidHost?.openInstanceManager?.()}
+            >
+              {t("settings.manageInstances")}
+            </Button>
+            <Text
+              size="1"
+              color="gray"
+            >
+              {t("settings.manageInstancesHint")}
+            </Text>
+          </Flex>
+        )}
       </Flex>
     </Box>
   );

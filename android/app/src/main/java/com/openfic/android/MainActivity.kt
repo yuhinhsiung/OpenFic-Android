@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -37,7 +38,11 @@ import com.openfic.android.web.AndroidHostBridge
 import com.openfic.android.web.BackendProbe
 import com.openfic.android.web.OpenFicAssetHandler
 import com.openfic.android.web.ProbeResult
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 
 /**
  * Hosts the OpenFic SPA and points it at a backend the user configures.
@@ -53,17 +58,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var assetLoader: WebViewAssetLoader
 
     private var webView: WebView? = null
-    private var loadedServerUrl: String? = null
-    private var loadedUiSource: UiSource? = null
+    private var loadedInstanceId: String? = null
     private var pendingFileChooser: android.webkit.ValueCallback<Array<Uri>>? = null
 
-    private val serverSetupLauncher = registerForActivityResult(
+    /** Completed by the reset page once the origin's storage has been cleared. */
+    private var pendingOriginReset: CancellableContinuation<Unit>? = null
+
+    private val instancesLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
-        val current = preferences.read()
-        when {
-            current.isConfigured -> loadApp(force = true)
-            else -> finish()
+        if (preferences.read().isConfigured) {
+            loadApp(force = true)
+        } else {
+            finish()
         }
     }
 
@@ -106,12 +113,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.retryButton.setOnClickListener { loadApp(force = true) }
-        binding.errorSettingsButton.setOnClickListener { openServerSettings() }
+        binding.errorSettingsButton.setOnClickListener { openInstanceManager() }
 
         if (preferences.read().isConfigured) {
             loadApp(force = true)
         } else {
-            serverSetupLauncher.launch(Intent(this, ServerSetupActivity::class.java))
+            instancesLauncher.launch(Intent(this, InstancesActivity::class.java))
         }
     }
 
@@ -178,37 +185,60 @@ class MainActivity : AppCompatActivity() {
     // region loading
 
     private fun loadApp(force: Boolean = false) {
-        val current = preferences.read()
-        val serverUrl = current.serverUrl
-        if (!current.isConfigured || serverUrl == null) {
+        val instance = preferences.read().activeInstance
+        if (instance == null) {
             showError(getString(R.string.error_no_server))
             return
         }
 
-        if (!force && serverUrl == loadedServerUrl && current.uiSource == loadedUiSource) {
+        if (!force && instance.id == loadedInstanceId) {
             return
         }
-        loadedServerUrl = serverUrl
-        loadedUiSource = current.uiSource
+
+        // Every instance is served from the same page origin, so the previous backend's
+        // cached projects, open tabs and unsaved writing buffers have to go before this one
+        // loads — they are keyed by project id and belong to the other server.
+        val isSwitch = loadedInstanceId != null && loadedInstanceId != instance.id
+        loadedInstanceId = instance.id
 
         showLoading()
 
         lifecycleScope.launch {
-            val reachable = BackendProbe.probe(serverUrl) is ProbeResult.Reachable
+            if (isSwitch) clearOriginStorage()
+            val reachable = BackendProbe.probe(instance.url) is ProbeResult.Reachable
             if (isFinishing || isDestroyed) return@launch
             if (reachable) {
                 showWebView()
                 val view = ensureWebView()
-                val target = when (current.uiSource) {
+                val target = when (instance.uiSource) {
                     // Same-origin: the backend serves the identical SPA from `/`, so
                     // runtime-config is not needed and cookies behave like a normal browser.
-                    UiSource.SERVER -> serverUrl
+                    UiSource.SERVER -> instance.url
                     UiSource.BUNDLED -> OpenFicAssetHandler.BASE_URL
                 }
                 view.loadUrl(target)
             } else {
-                showError(getString(R.string.error_unreachable, serverUrl))
+                showError(getString(R.string.error_unreachable, instance.url))
             }
+        }
+    }
+
+    /**
+     * Loads an internal page on the app's own origin that wipes IndexedDB and localStorage,
+     * and waits for it to report back. Bounded so a page that never loads (no WebView
+     * engine, script error) cannot wedge the switch.
+     */
+    private suspend fun clearOriginStorage() {
+        val view = ensureWebView()
+        val completed = withTimeoutOrNull(ORIGIN_RESET_TIMEOUT_MS) {
+            suspendCancellableCoroutine { continuation ->
+                pendingOriginReset = continuation
+                continuation.invokeOnCancellation { pendingOriginReset = null }
+                view.loadUrl(OpenFicAssetHandler.RESET_URL)
+            }
+        }
+        if (completed == null) {
+            Log.w(TAG, "origin storage reset timed out; loading the new instance anyway")
         }
     }
 
@@ -235,8 +265,17 @@ class MainActivity : AppCompatActivity() {
         binding.errorMessage.text = message
     }
 
-    private fun openServerSettings() {
-        serverSetupLauncher.launch(Intent(this, ServerSetupActivity::class.java))
+    private fun openInstanceManager() {
+        Log.d(TAG, "launching InstancesActivity")
+        instancesLauncher.launch(Intent(this, InstancesActivity::class.java))
+    }
+
+    private fun onOriginResetCompleted() {
+        Log.d(TAG, "origin storage cleared")
+        pendingOriginReset?.let { continuation ->
+            pendingOriginReset = null
+            if (continuation.isActive) continuation.resume(Unit)
+        }
     }
 
     // endregion
@@ -285,7 +324,8 @@ class MainActivity : AppCompatActivity() {
             addJavascriptInterface(
                 AndroidHostBridge(
                     onAppearanceChanged = ::applyTheme,
-                    onOpenServerSettingsRequested = ::openServerSettings,
+                    onOpenInstanceManagerRequested = ::openInstanceManager,
+                    onOriginResetCompleted = ::onOriginResetCompleted,
                 ),
                 AndroidHostBridge.INTERFACE_NAME,
             )
@@ -302,7 +342,8 @@ class MainActivity : AppCompatActivity() {
                 ): Boolean {
                     val url = request.url
                     if (url.host == OpenFicAssetHandler.DOMAIN) return false
-                    val backend = loadedServerUrl
+                    // Navigating within the active backend stays in the app.
+                    val backend = preferences.read().activeInstance?.url
                     if (backend != null && url.toString().startsWith(backend)) return false
                     if (url.scheme == "http" || url.scheme == "https") {
                         // Anything else is a link the user tapped; hand it to the browser
@@ -400,7 +441,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private companion object {
+        const val TAG = "OpenFicMain"
         const val UA_SUFFIX = "OpenFicAndroid/1.0"
+        const val ORIGIN_RESET_TIMEOUT_MS = 5_000L
 
         // Matches the SPA's own surfaces so the strip behind the system bars blends in.
         // `theme_color` in frontend/public/manifest.webmanifest is #18181b.

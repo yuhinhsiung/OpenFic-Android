@@ -2,6 +2,9 @@ package com.openfic.android.storage
 
 import android.content.Context
 import androidx.core.content.edit
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.UUID
 
 /**
  * Where the WebView gets its HTML/JS from.
@@ -21,42 +24,158 @@ enum class UiSource {
     SERVER,
 }
 
-data class AppPreferences(
-    val serverUrl: String?,
+/**
+ * A backend the user has saved. Mirrors the desktop client's "instance" concept: the shell
+ * keeps a list and points the frontend at whichever one is active.
+ *
+ * [uiSource] is per instance rather than global because it tracks a property of the backend
+ * — whether it enforces a password — and two saved backends can differ on that.
+ */
+data class BackendInstance(
+    val id: String,
+    val name: String,
+    val url: String,
     val uiSource: UiSource,
+)
+
+data class AppPreferences(
+    val instances: List<BackendInstance>,
+    val activeInstanceId: String?,
 ) {
+    val activeInstance: BackendInstance?
+        get() = instances.firstOrNull { it.id == activeInstanceId }
+
     val isConfigured: Boolean
-        get() = !serverUrl.isNullOrBlank()
+        get() = activeInstance != null
 }
 
 class AppPreferencesStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     fun read(): AppPreferences = AppPreferences(
-        serverUrl = prefs.getString(KEY_SERVER_URL, null)?.takeIf { it.isNotBlank() },
-        uiSource = when (prefs.getString(KEY_UI_SOURCE, null)) {
-            UiSource.SERVER.name -> UiSource.SERVER
-            else -> UiSource.BUNDLED
-        },
+        instances = readInstances(),
+        activeInstanceId = prefs.getString(KEY_ACTIVE_INSTANCE, null),
     )
 
-    fun saveServerUrl(url: String) {
-        prefs.edit { putString(KEY_SERVER_URL, normalizeServerUrl(url)) }
+    /** Adds a new instance and makes it active. Returns the new id. */
+    fun addInstance(name: String, url: String, uiSource: UiSource): String {
+        val instance = BackendInstance(
+            id = UUID.randomUUID().toString(),
+            name = name.trim().ifEmpty { defaultNameFor(url) },
+            url = normalizeServerUrl(url),
+            uiSource = uiSource,
+        )
+        writeInstances(readInstances() + instance)
+        setActiveInstance(instance.id)
+        return instance.id
     }
 
-    fun saveUiSource(source: UiSource) {
-        prefs.edit { putString(KEY_UI_SOURCE, source.name) }
+    fun updateInstance(id: String, name: String, url: String, uiSource: UiSource) {
+        val updated = readInstances().map { instance ->
+            if (instance.id != id) {
+                instance
+            } else {
+                instance.copy(
+                    name = name.trim().ifEmpty { defaultNameFor(url) },
+                    url = normalizeServerUrl(url),
+                    uiSource = uiSource,
+                )
+            }
+        }
+        writeInstances(updated)
     }
 
-    fun clear() {
-        prefs.edit { clear() }
+    fun removeInstance(id: String) {
+        val remaining = readInstances().filterNot { it.id == id }
+        writeInstances(remaining)
+        if (prefs.getString(KEY_ACTIVE_INSTANCE, null) == id) {
+            setActiveInstance(remaining.firstOrNull()?.id)
+        }
+    }
+
+    fun setActiveInstance(id: String?) {
+        prefs.edit { putString(KEY_ACTIVE_INSTANCE, id) }
+    }
+
+    private fun readInstances(): List<BackendInstance> {
+        val raw = prefs.getString(KEY_INSTANCES, null)
+        val parsed = if (raw.isNullOrBlank()) {
+            emptyList()
+        } else {
+            runCatching {
+                val array = JSONArray(raw)
+                (0 until array.length()).mapNotNull { index ->
+                    val item = array.optJSONObject(index) ?: return@mapNotNull null
+                    val id = item.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    val url = item.optString("url").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    BackendInstance(
+                        id = id,
+                        name = item.optString("name"),
+                        url = url,
+                        uiSource = if (item.optString("uiSource") == UiSource.SERVER.name) {
+                            UiSource.SERVER
+                        } else {
+                            UiSource.BUNDLED
+                        },
+                    )
+                }
+            }.getOrDefault(emptyList())
+        }
+
+        // Upgrade path from the single-backend build, which stored only a bare URL.
+        if (parsed.isNotEmpty()) return parsed
+        val legacyUrl = prefs.getString(KEY_LEGACY_SERVER_URL, null)
+        if (legacyUrl.isNullOrBlank()) return emptyList()
+
+        val migrated = listOf(
+            BackendInstance(
+                id = LEGACY_INSTANCE_ID,
+                name = defaultNameFor(legacyUrl),
+                url = normalizeServerUrl(legacyUrl),
+                uiSource = if (prefs.getString(KEY_LEGACY_UI_SOURCE, null) == UiSource.SERVER.name) {
+                    UiSource.SERVER
+                } else {
+                    UiSource.BUNDLED
+                },
+            ),
+        )
+        writeInstances(migrated)
+        prefs.edit { putString(KEY_ACTIVE_INSTANCE, LEGACY_INSTANCE_ID) }
+        return migrated
+    }
+
+    private fun writeInstances(instances: List<BackendInstance>) {
+        val array = JSONArray()
+        instances.forEach { instance ->
+            array.put(
+                JSONObject().apply {
+                    put("id", instance.id)
+                    put("name", instance.name)
+                    put("url", instance.url)
+                    put("uiSource", instance.uiSource.name)
+                },
+            )
+        }
+        prefs.edit { putString(KEY_INSTANCES, array.toString()) }
     }
 
     private companion object {
         const val PREFS_NAME = "openfic_android_prefs"
-        const val KEY_SERVER_URL = "server_url"
-        const val KEY_UI_SOURCE = "ui_source"
+        const val KEY_INSTANCES = "instances"
+        const val KEY_ACTIVE_INSTANCE = "active_instance_id"
+
+        /** Written by builds that supported only one backend. */
+        const val KEY_LEGACY_SERVER_URL = "server_url"
+        const val KEY_LEGACY_UI_SOURCE = "ui_source"
+        const val LEGACY_INSTANCE_ID = "migrated-default"
     }
+}
+
+/** A readable default label: the host, which is what distinguishes one backend from another. */
+fun defaultNameFor(rawUrl: String): String {
+    val normalized = normalizeServerUrl(rawUrl)
+    val withoutScheme = normalized.substringAfter("://", normalized)
+    return withoutScheme.substringBefore('/').ifBlank { normalized }
 }
 
 /**

@@ -13,6 +13,21 @@
     <string name="action_server_settings">Change server address</string>
     <string name="action_test_connection">Test connection</string>
     <string name="action_connect">Connect</string>
+    <string name="action_save">Save</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_edit">Edit</string>
+
+    <string name="instances_title">Instances</string>
+    <string name="instances_subtitle">Tap an instance to switch to it; the app reloads and connects to that backend.</string>
+    <string name="instances_empty">No backends have been added yet.</string>
+    <string name="instance_add_title">Add instance</string>
+    <string name="instance_edit_title">Edit instance</string>
+    <string name="instance_name_label">Name (optional)</string>
+    <string name="instance_name_help">A label to tell backends apart. Defaults to the host name.</string>
+    <string name="instance_active">Currently in use</string>
+    <string name="instance_delete_confirm_title">Delete this instance?</string>
+    <string name="instance_delete_confirm_message">This only removes the entry from this device. Nothing on the server is touched.</string>
 
     <string name="setup_title">Connect to OpenFic</string>
     <string name="setup_subtitle">Enter the address of your OpenFic backend. All data stays on your own server.</string>

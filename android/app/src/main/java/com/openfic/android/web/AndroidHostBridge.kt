@@ -19,7 +19,8 @@ import org.json.JSONObject
  */
 class AndroidHostBridge(
     private val onAppearanceChanged: (isDark: Boolean) -> Unit,
-    private val onOpenServerSettingsRequested: () -> Unit,
+    private val onOpenInstanceManagerRequested: () -> Unit,
+    private val onOriginResetCompleted: () -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -39,9 +40,21 @@ class AndroidHostBridge(
         Log.d(TAG, "socket: $payloadJson")
     }
 
+    /**
+     * Takes an ignored string: the injected shim funnels every call through one helper that
+     * always passes a payload, and Android's JS bridge rejects a no-arg method invoked with
+     * an argument — the shim swallows that error, so the call would vanish silently.
+     */
     @JavascriptInterface
-    fun openServerSettings() {
-        mainHandler.post(onOpenServerSettingsRequested)
+    fun openInstanceManager(@Suppress("UNUSED_PARAMETER") payload: String) {
+        Log.d(TAG, "openInstanceManager requested by the page")
+        mainHandler.post(onOpenInstanceManagerRequested)
+    }
+
+    /** Sent by the internal reset page once this origin's storage has been cleared. */
+    @JavascriptInterface
+    fun notifyOriginResetComplete() {
+        mainHandler.post(onOriginResetCompleted)
     }
 
     companion object {
@@ -68,7 +81,7 @@ class AndroidHostBridge(
                 publishAppearance: function (payload) { call("publishAppearance", payload); },
                 publishLanguage: function (language) { call("publishLanguage", language); },
                 publishSocketDiagnostic: function (payload) { call("publishSocketDiagnostic", payload); },
-                openServerSettings: function () { call("openServerSettings"); }
+                openInstanceManager: function () { call("openInstanceManager"); }
               };
             })();
             </script>

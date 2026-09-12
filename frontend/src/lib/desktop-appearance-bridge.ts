@@ -43,8 +43,8 @@ declare global {
       publishSocketDiagnostic: (payload: SocketDiagnosticPayload) => void;
     };
     openficAndroidHost?: AppearanceHostBridge & {
-      /** Opens the native server-address screen; absent on other platforms. */
-      openServerSettings?: () => void;
+      /** Opens the native instance manager (add / switch / edit backends). */
+      openInstanceManager?: () => void;
     };
   }
 }

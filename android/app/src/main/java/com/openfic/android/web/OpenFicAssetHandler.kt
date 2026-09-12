@@ -42,6 +42,11 @@ class OpenFicAssetHandler(
             return runtimeConfigResponse()
         }
 
+        if (relative == RESET_FILE) {
+            Log.d(TAG, "serving origin reset page")
+            return resetPageResponse()
+        }
+
         if (relative.contains("..")) {
             return null
         }
@@ -93,11 +98,35 @@ class OpenFicAssetHandler(
         )
     }
 
+    /**
+     * Wipes everything the bundled SPA keeps for this origin, then reports back.
+     *
+     * Switching backends has to start from a clean slate: every instance is served from the
+     * same `appassets.androidplatform.net` origin, and the SPA stores project tabs, recent
+     * projects and unsaved writing buffers in IndexedDB. Left in place, those would point at
+     * ids belonging to the backend that was active before.
+     *
+     * This has to run as a page on the same origin (IndexedDB is origin-scoped), which is
+     * why it is served from here rather than executed over `evaluateJavascript` — the caller
+     * may not have any page loaded yet.
+     */
+    private fun resetPageResponse(): WebResourceResponse {
+        val body = RESET_PAGE_HTML.toByteArray(Charsets.UTF_8)
+        return WebResourceResponse(
+            "text/html",
+            "UTF-8",
+            200,
+            "OK",
+            mapOf("Cache-Control" to "no-store"),
+            ByteArrayInputStream(body),
+        )
+    }
+
     private fun runtimeConfigResponse(): WebResourceResponse {
-        val serverUrl = preferences.read().serverUrl
+        val active = preferences.read().activeInstance
         val payload = JSONObject().apply {
-            if (!serverUrl.isNullOrBlank()) {
-                put("backendBaseUrl", serverUrl)
+            if (active != null) {
+                put("backendBaseUrl", active.url)
             }
         }
 
@@ -179,6 +208,39 @@ class OpenFicAssetHandler(
         const val RUNTIME_CONFIG_FILE = "runtime-config.json"
 
         const val RUNTIME_CONFIG_PATH = "/runtime-config.json"
+
+        /** Internal page that clears this origin's storage before an instance switch. */
+        const val RESET_FILE = "__reset-origin.html"
+
+        val RESET_URL = "https://$DOMAIN/$RESET_FILE"
+
+        private val RESET_PAGE_HTML = """
+            <!doctype html>
+            <html><head><meta charset="utf-8"><title>reset</title></head>
+            <body>
+            <script>
+            (function () {
+              function report() {
+                try { window.__openficAndroidHost.notifyOriginResetComplete(); } catch (error) {}
+              }
+              function clearDatabases() {
+                if (!self.indexedDB || !indexedDB.databases) return Promise.resolve();
+                return indexedDB.databases().then(function (databases) {
+                  return Promise.all(databases.map(function (info) {
+                    return new Promise(function (resolve) {
+                      var request = indexedDB.deleteDatabase(info.name);
+                      request.onsuccess = request.onerror = request.onblocked = function () { resolve(); };
+                    });
+                  }));
+                }).catch(function () {});
+              }
+              try { localStorage.clear(); } catch (error) {}
+              try { sessionStorage.clear(); } catch (error) {}
+              clearDatabases().then(report, report);
+            })();
+            </script>
+            </body></html>
+        """.trimIndent()
 
         /**
          * Entry point for the bundled SPA. Deliberately the directory root, not
