@@ -45,6 +45,8 @@ declare global {
     openficAndroidHost?: AppearanceHostBridge & {
       /** Opens the native instance manager (add / switch / edit backends). */
       openInstanceManager?: () => void;
+      /** Runs a user-initiated update check and reports the outcome natively. */
+      checkForUpdates?: () => void;
     };
   }
 }

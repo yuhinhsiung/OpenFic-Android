@@ -21,6 +21,7 @@ class AndroidHostBridge(
     private val onAppearanceChanged: (isDark: Boolean) -> Unit,
     private val onLanguageChanged: (languageTag: String) -> Unit,
     private val onOpenInstanceManagerRequested: () -> Unit,
+    private val onUpdateCheckRequested: () -> Unit,
     private val onOriginResetCompleted: () -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -65,6 +66,13 @@ class AndroidHostBridge(
         mainHandler.post(onOriginResetCompleted)
     }
 
+    /** Manual "check for updates" from the app's settings, where the user expects feedback. */
+    @JavascriptInterface
+    fun checkForUpdates(@Suppress("UNUSED_PARAMETER") payload: String) {
+        Log.d(TAG, "checkForUpdates requested by the page")
+        mainHandler.post(onUpdateCheckRequested)
+    }
+
     companion object {
         private const val TAG = "OpenFicHost"
 
@@ -72,11 +80,14 @@ class AndroidHostBridge(
         const val INTERFACE_NAME = "__openficAndroidHost"
 
         /**
-         * Installed ahead of the app bundle so `register-sw.ts` and the appearance bridge
-         * can feature-detect the host during their first synchronous run.
+         * The shim itself, without the surrounding `<script>` tag.
+         *
+         * Two injection paths use it: the asset handler splices [HOST_SHIM_SCRIPT] into the
+         * bundled `index.html`, and server-interface mode registers this as a document-start
+         * script (`WebViewCompat.addDocumentStartJavaScript`) because that page comes from the
+         * backend and never passes through the asset handler.
          */
-        val HOST_SHIM_SCRIPT: String = """
-            <script>
+        val HOST_SHIM_JS: String = """
             (function () {
               var native = window.$INTERFACE_NAME;
               if (!native || window.openficAndroidHost) return;
@@ -94,10 +105,13 @@ class AndroidHostBridge(
                 publishAppearance: function (payload) { call("publishAppearance", payload); },
                 publishLanguage: function (language) { call("publishLanguage", language); },
                 publishSocketDiagnostic: function (payload) { call("publishSocketDiagnostic", payload); },
-                openInstanceManager: function () { call("openInstanceManager"); }
+                openInstanceManager: function () { call("openInstanceManager"); },
+                checkForUpdates: function () { call("checkForUpdates"); }
               };
             })();
-            </script>
         """.trimIndent()
+
+        /** [HOST_SHIM_JS] wrapped for splicing into HTML. */
+        val HOST_SHIM_SCRIPT: String = "<script>\n$HOST_SHIM_JS\n</script>"
     }
 }

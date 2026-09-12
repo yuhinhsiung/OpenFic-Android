@@ -31,9 +31,22 @@ class InstancesActivity : AppCompatActivity() {
     private lateinit var binding: ActivityInstancesBinding
     private lateinit var preferences: AppPreferencesStore
 
+    /** Set when this screen was opened with nothing configured — see [editLauncher]. */
+    private var openedWithNoInstances = false
+
     private val editLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
-    ) { render() }
+    ) {
+        // Adding the very first instance is the first-run flow: the user typed an address and
+        // saved, so take them into the app instead of asking for a second confirming tap on
+        // the row that just appeared.
+        if (openedWithNoInstances && preferences.read().instances.isNotEmpty()) {
+            setResult(RESULT_OK)
+            finish()
+            return@registerForActivityResult
+        }
+        render()
+    }
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(localizedContext(newBase))
@@ -45,6 +58,7 @@ class InstancesActivity : AppCompatActivity() {
         binding = ActivityInstancesBinding.inflate(layoutInflater)
         setContentView(binding.root)
         preferences = AppPreferencesStore(this)
+        openedWithNoInstances = preferences.read().instances.isEmpty()
         applyWindowInsets()
 
         binding.addButton.setOnClickListener { openEditor(instanceId = null) }

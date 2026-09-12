@@ -277,6 +277,13 @@ export function GeneralSettings({
             >
               {t("settings.manageInstancesHint")}
             </Text>
+            <Button
+              variant="soft"
+              mt="1"
+              onClick={() => window.openficAndroidHost?.checkForUpdates?.()}
+            >
+              {t("settings.checkForUpdates")}
+            </Button>
           </Flex>
         )}
       </Flex>

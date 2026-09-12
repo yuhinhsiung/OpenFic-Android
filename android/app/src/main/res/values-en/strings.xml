@@ -30,6 +30,25 @@
     <string name="instance_delete_confirm_title">Delete this instance?</string>
     <string name="instance_delete_confirm_message">This only removes the entry from this device. Nothing on the server is touched.</string>
 
+    <string name="auth_required_title">This backend requires a password</string>
+    <string name="auth_required_message">\"%1$s\" needs a password to access.\n\nThe bundled interface cannot carry the login cookie — the page is cross-origin to the backend and the browser refuses to send the cookie under the SameSite rules — so signing in there always fails.\n\nSwitch to the server interface to sign in normally: it loads the UI straight from your backend, same-origin with the API.</string>
+    <string name="auth_required_switch">Use the server interface</string>
+    <string name="auth_required_continue">Try the bundled interface anyway</string>
+
+    <string name="update_available_title">Update available</string>
+    <string name="update_available_message">Installed %1$s, latest %2$s.\n\nDownload the update? Tap the notification when it finishes to install; if GitHub is unreachable, you will be offered the browser instead.</string>
+    <string name="update_action_download">Download update</string>
+    <string name="update_action_later">Later</string>
+    <string name="update_up_to_date">Already up to date</string>
+    <string name="update_check_failed">Could not check for updates. GitHub may be unreachable on this network.</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_download_started">Download started…</string>
+    <string name="update_download_done">Download complete. Tap the notification to install.</string>
+    <string name="update_download_stalled_title">The in-app download is not progressing</string>
+    <string name="update_download_stalled_message">Releases are hosted on GitHub and the app\'s direct connection may be blocked. Open the download link in your browser instead? A browser can use the proxy you already have.</string>
+    <string name="update_action_open_browser">Open in browser</string>
+    <string name="update_open_failed">Could not open a browser. Visit the Releases page on GitHub manually.</string>
+
     <string name="setup_title">Connect to OpenFic</string>
     <string name="setup_subtitle">Enter the address of your OpenFic backend. All data stays on your own server.</string>
     <string name="setup_server_label">Server address</string>

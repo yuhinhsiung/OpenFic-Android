@@ -21,8 +21,10 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -30,16 +32,23 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
+import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewCompat
 import com.openfic.android.storage.AppPreferencesStore
+import com.openfic.android.storage.BackendInstance
 import com.openfic.android.storage.UiSource
 import com.openfic.android.storage.localizedContext
+import com.openfic.android.update.UpdateCheckResult
+import com.openfic.android.update.UpdateChecker
+import com.openfic.android.update.UpdateInfo
 import com.openfic.android.databinding.ActivityMainBinding
 import com.openfic.android.web.AndroidHostBridge
 import com.openfic.android.web.BackendProbe
 import com.openfic.android.web.OpenFicAssetHandler
 import com.openfic.android.web.ProbeResult
 import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -59,7 +68,23 @@ class MainActivity : AppCompatActivity() {
     private lateinit var assetLoader: WebViewAssetLoader
 
     private var webView: WebView? = null
-    private var loadedInstanceId: String? = null
+
+    /**
+     * Identity of what the WebView currently has loaded. Compared as a whole rather than by
+     * instance id alone: editing an instance's URL or interface source keeps the id but must
+     * still trigger a reload, and re-entering the manager without changing anything must not.
+     */
+    private var loadedSignature: String? = null
+
+    /** Instance signature whose "use the server interface instead" prompt was dismissed. */
+    private var authWarningDismissedFor: String? = null
+
+    /** The launch-time update check runs once per activity instance. */
+    private var updateCheckStarted = false
+
+    /** Document-start registration of the host shim; only used in server-interface mode. */
+    private var hostShimHandle: ScriptHandler? = null
+
     private var pendingFileChooser: android.webkit.ValueCallback<Array<Uri>>? = null
 
     /** Completed by the reset page once the origin's storage has been cleared. */
@@ -68,8 +93,11 @@ class MainActivity : AppCompatActivity() {
     private val instancesLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
+        // Not forced: loadApp compares the full instance signature, so switching instances or
+        // editing the active one's URL/interface source reloads, while simply opening the
+        // manager and backing out does not.
         if (preferences.read().isConfigured) {
-            loadApp(force = true)
+            loadApp()
         } else {
             finish()
         }
@@ -196,15 +224,16 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        if (!force && instance.id == loadedInstanceId) {
+        val signature = "${instance.id}|${instance.url}|${instance.uiSource}"
+        if (!force && signature == loadedSignature) {
             return
         }
 
         // Every instance is served from the same page origin, so the previous backend's
         // cached projects, open tabs and unsaved writing buffers have to go before this one
         // loads — they are keyed by project id and belong to the other server.
-        val isSwitch = loadedInstanceId != null && loadedInstanceId != instance.id
-        loadedInstanceId = instance.id
+        val isSwitch = loadedSignature != null && loadedSignature != signature
+        loadedSignature = signature
 
         showLoading()
 
@@ -213,8 +242,17 @@ class MainActivity : AppCompatActivity() {
             val reachable = BackendProbe.probe(instance.url) is ProbeResult.Reachable
             if (isFinishing || isDestroyed) return@launch
             if (reachable) {
+                if (instance.uiSource == UiSource.BUNDLED && authWarningDismissedFor != signature) {
+                    val auth = BackendProbe.probeAuth(instance.url)
+                    if (isFinishing || isDestroyed) return@launch
+                    if (auth != null && auth.enabled && !auth.authenticated) {
+                        offerServerInterface(instance, signature)
+                        return@launch
+                    }
+                }
                 showWebView()
                 val view = ensureWebView()
+                installHostShim(view, instance)
                 val target = when (instance.uiSource) {
                     // Same-origin: the backend serves the identical SPA from `/`, so
                     // runtime-config is not needed and cookies behave like a normal browser.
@@ -226,6 +264,66 @@ class MainActivity : AppCompatActivity() {
                 showError(getString(R.string.error_unreachable, instance.url))
             }
         }
+    }
+
+    /**
+     * Makes sure the page gets `window.openficAndroidHost`.
+     *
+     * In bundled mode the asset handler already splices the shim into `index.html`. In server
+     * mode the page comes from the backend and never passes through the asset handler, so it
+     * is registered as a document-start script instead — which also runs before the bundle,
+     * matching how the frontend feature-detects the host.
+     *
+     * The registration is scoped to the backend's own origin and replaced whenever the active
+     * instance changes.
+     */
+    private fun installHostShim(view: WebView, instance: BackendInstance) {
+        hostShimHandle?.remove()
+        hostShimHandle = null
+        if (instance.uiSource != UiSource.SERVER) return
+
+        val parsed = Uri.parse(instance.url)
+        val origin = "${parsed.scheme}://${parsed.authority}"
+        if (parsed.scheme.isNullOrBlank() || parsed.authority.isNullOrBlank()) return
+
+        hostShimHandle = runCatching {
+            WebViewCompat.addDocumentStartJavaScript(
+                view,
+                AndroidHostBridge.HOST_SHIM_JS,
+                setOf(origin),
+            )
+        }.onFailure { Log.w(TAG, "could not install host shim for $origin: ${it.message}") }
+            .getOrNull()
+    }
+
+    /**
+     * A password-protected backend cannot be used from the bundled interface: the login
+     * cookie would be cross-site there, and `SameSite=Lax` makes WebView drop it on every
+     * subsequent request, so the login form fails no matter what is typed. The server
+     * interface loads the SPA from the backend itself, which is same-origin and works.
+     *
+     * Offering the switch beats letting the user discover this by failing to log in.
+     */
+    private fun offerServerInterface(instance: BackendInstance, signature: String) {
+        showLoading()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.auth_required_title)
+            .setMessage(getString(R.string.auth_required_message, instance.name))
+            .setPositiveButton(R.string.auth_required_switch) { _, _ ->
+                preferences.updateInstance(
+                    instance.id,
+                    instance.name,
+                    instance.url,
+                    UiSource.SERVER,
+                )
+                loadApp(force = true)
+            }
+            .setNegativeButton(R.string.auth_required_continue) { _, _ ->
+                authWarningDismissedFor = signature
+                loadApp(force = true)
+            }
+            .setCancelable(false)
+            .show()
     }
 
     /**
@@ -268,6 +366,110 @@ class MainActivity : AppCompatActivity() {
         binding.webViewContainer.visibility = View.INVISIBLE
         binding.errorView.visibility = View.VISIBLE
         binding.errorMessage.text = message
+    }
+
+    /**
+     * Looks for a newer release. Automatic checks stay silent unless there is something to
+     * offer, and remember a declined version so the prompt does not reappear every launch;
+     * a manual check always reports its outcome.
+     */
+    private fun checkForUpdates(manual: Boolean) {
+        if (manual) {
+            Toast.makeText(this, R.string.update_checking, Toast.LENGTH_SHORT).show()
+        }
+        lifecycleScope.launch {
+            val result = UpdateChecker.check(BuildConfig.VERSION_NAME)
+            if (isFinishing || isDestroyed) return@launch
+            when (result) {
+                is UpdateCheckResult.Available -> {
+                    val alreadyDismissed =
+                        preferences.read().dismissedUpdateVersion == result.info.version
+                    if (manual || !alreadyDismissed) showUpdateDialog(result.info)
+                }
+
+                UpdateCheckResult.UpToDate ->
+                    if (manual) Toast.makeText(this@MainActivity, R.string.update_up_to_date, Toast.LENGTH_SHORT).show()
+
+                is UpdateCheckResult.Failed -> {
+                    Log.d(TAG, "update check failed: ${result.reason}")
+                    if (manual) Toast.makeText(this@MainActivity, R.string.update_check_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun showUpdateDialog(info: UpdateInfo) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.update_available_title)
+            .setMessage(getString(R.string.update_available_message, BuildConfig.VERSION_NAME, info.version))
+            .setPositiveButton(R.string.update_action_download) { _, _ -> startUpdateDownload(info) }
+            .setNegativeButton(R.string.update_action_later) { _, _ ->
+                preferences.saveDismissedUpdateVersion(info.version)
+            }
+            .show()
+    }
+
+    /**
+     * Downloads in-app first, with the browser as the fallback rather than the default.
+     *
+     * DownloadManager only reports failure after its own retries, and on a network that
+     * blocks `github.com` it can sit idle producing no visible signal at all. So the state is
+     * sampled for a short window: real progress means the download is healthy and the
+     * completion notification takes over; a failure — or nothing moving at all — hands off to
+     * the browser, which can use whatever proxy the device already has.
+     */
+    private fun startUpdateDownload(info: UpdateInfo) {
+        val downloadId = UpdateChecker.enqueueDownload(this, info)
+        if (downloadId == null) {
+            offerBrowserDownload(info)
+            return
+        }
+        Toast.makeText(this, R.string.update_download_started, Toast.LENGTH_SHORT).show()
+
+        lifecycleScope.launch {
+            var sawProgress = false
+            repeat(UPDATE_WATCH_ATTEMPTS) {
+                delay(UPDATE_WATCH_INTERVAL_MS)
+                if (isFinishing || isDestroyed) return@launch
+                val snapshot = UpdateChecker.downloadSnapshot(this@MainActivity, downloadId)
+                    ?: return@launch
+                if (snapshot.bytesDownloaded > 0) sawProgress = true
+
+                when {
+                    snapshot.state == DownloadManager.STATUS_SUCCESSFUL -> {
+                        Toast.makeText(this@MainActivity, R.string.update_download_done, Toast.LENGTH_LONG).show()
+                        return@launch
+                    }
+
+                    snapshot.state == DownloadManager.STATUS_FAILED -> {
+                        offerBrowserDownload(info)
+                        return@launch
+                    }
+
+                    // Moving data: stop polling and let the notification announce it.
+                    sawProgress -> return@launch
+                }
+            }
+            if (!sawProgress) offerBrowserDownload(info)
+        }
+    }
+
+    private fun offerBrowserDownload(info: UpdateInfo) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.update_download_stalled_title)
+            .setMessage(R.string.update_download_stalled_message)
+            .setPositiveButton(R.string.update_action_open_browser) { _, _ -> openInBrowser(info) }
+            .setNegativeButton(R.string.action_cancel, null)
+            .show()
+    }
+
+    private fun openInBrowser(info: UpdateInfo) {
+        val opened = runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.apkUrl)))
+        }.isSuccess
+        if (!opened) {
+            Toast.makeText(this, R.string.update_open_failed, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun openInstanceManager() {
@@ -339,6 +541,7 @@ class MainActivity : AppCompatActivity() {
                     onAppearanceChanged = ::applyTheme,
                     onLanguageChanged = ::onLanguageChanged,
                     onOpenInstanceManagerRequested = ::openInstanceManager,
+                    onUpdateCheckRequested = { checkForUpdates(manual = true) },
                     onOriginResetCompleted = ::onOriginResetCompleted,
                 ),
                 AndroidHostBridge.INTERFACE_NAME,
@@ -432,7 +635,11 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         webView?.onResume()
         webView?.resumeTimers()
-        // The setup screen may have been opened from the web UI and changed the address.
+        if (!updateCheckStarted) {
+            updateCheckStarted = true
+            checkForUpdates(manual = false)
+        }
+        // The instance manager may have been opened from the web UI and changed the address.
         if (preferences.read().isConfigured && webView != null) {
             loadApp(force = false)
         }
@@ -445,6 +652,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        hostShimHandle?.remove()
+        hostShimHandle = null
         binding.webViewContainer.removeAllViews()
         webView?.apply {
             stopLoading()
@@ -458,6 +667,10 @@ class MainActivity : AppCompatActivity() {
         const val TAG = "OpenFicMain"
         const val UA_SUFFIX = "OpenFicAndroid/1.0"
         const val ORIGIN_RESET_TIMEOUT_MS = 5_000L
+
+        /** How long to watch an update download before deciding it is stalled. */
+        const val UPDATE_WATCH_ATTEMPTS = 8
+        const val UPDATE_WATCH_INTERVAL_MS = 2_000L
 
         // Matches the SPA's own surfaces so the strip behind the system bars blends in.
         // `theme_color` in frontend/public/manifest.webmanifest is #18181b.

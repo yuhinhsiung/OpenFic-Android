@@ -43,6 +43,8 @@ data class AppPreferences(
     val activeInstanceId: String?,
     /** BCP-47 tag the SPA reported, used to localise the native screens. Null until it does. */
     val language: String?,
+    /** Update version the user already declined, so the prompt is not repeated. */
+    val dismissedUpdateVersion: String?,
 ) {
     val activeInstance: BackendInstance?
         get() = instances.firstOrNull { it.id == activeInstanceId }
@@ -58,10 +60,15 @@ class AppPreferencesStore(context: Context) {
         instances = readInstances(),
         activeInstanceId = prefs.getString(KEY_ACTIVE_INSTANCE, null),
         language = prefs.getString(KEY_LANGUAGE, null)?.takeIf { it.isNotBlank() },
+        dismissedUpdateVersion = prefs.getString(KEY_DISMISSED_UPDATE, null),
     )
 
     fun saveLanguage(language: String) {
         prefs.edit { putString(KEY_LANGUAGE, language) }
+    }
+
+    fun saveDismissedUpdateVersion(version: String) {
+        prefs.edit { putString(KEY_DISMISSED_UPDATE, version) }
     }
 
     /** Adds a new instance and makes it active. Returns the new id. */
@@ -171,6 +178,7 @@ class AppPreferencesStore(context: Context) {
         const val KEY_INSTANCES = "instances"
         const val KEY_ACTIVE_INSTANCE = "active_instance_id"
         const val KEY_LANGUAGE = "ui_language"
+        const val KEY_DISMISSED_UPDATE = "dismissed_update_version"
 
         /** Written by builds that supported only one backend. */
         const val KEY_LEGACY_SERVER_URL = "server_url"

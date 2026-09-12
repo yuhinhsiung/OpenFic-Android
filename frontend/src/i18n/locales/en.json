@@ -876,6 +876,7 @@
     "backendInstances": "Backend instances",
     "manageInstances": "Manage instances",
     "manageInstancesHint": "Add, switch between, or remove backends. Switching reloads the app against the new backend.",
+    "checkForUpdates": "Check for updates",
     "editorAutoIndent": "Auto-indent paragraphs",
     "editorAutoIndentHint": "When breaking a line, if the current paragraph starts with two full-width spaces, automatically add the same prefix to the next paragraph.",
     "editorAutoIndentTooltip": "Applies to the chapter editor only.",

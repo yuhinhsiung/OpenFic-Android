@@ -876,6 +876,7 @@
     "backendInstances": "后端实例",
     "manageInstances": "管理实例",
     "manageInstancesHint": "添加、切换或删除后端。切换后应用会重新加载并连接新的后端。",
+    "checkForUpdates": "检查更新",
     "editorAutoIndent": "段落自动缩进",
     "editorAutoIndentHint": "换行时，若当前段落以两个全角空格开头，自动为下一段添加相同的前缀。",
     "editorAutoIndentTooltip": "仅对章节编辑器生效",

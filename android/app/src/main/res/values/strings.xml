@@ -30,6 +30,25 @@
     <string name="instance_delete_confirm_title">删除这个实例？</string>
     <string name="instance_delete_confirm_message">只会从本机移除这条记录，不会影响服务器上的任何数据。</string>
 
+    <string name="auth_required_title">这个后端启用了访问密码</string>
+    <string name="auth_required_message">「%1$s」需要密码才能访问。\n\n内置界面无法携带登录 Cookie（页面来源与后端跨域，浏览器会按 SameSite 规则拒绝发送），所以在这里登录会一直失败。\n\n改用「服务器界面」即可正常登录 —— 界面会直接从你的后端加载，与接口同源。</string>
+    <string name="auth_required_switch">改用服务器界面</string>
+    <string name="auth_required_continue">仍然尝试内置界面</string>
+
+    <string name="update_available_title">有新版本</string>
+    <string name="update_available_message">当前版本 %1$s，最新版本 %2$s。\n\n是否下载更新？下载完成后点击通知即可安装；如果无法访问 GitHub，会提示改用浏览器。</string>
+    <string name="update_action_download">下载更新</string>
+    <string name="update_action_later">稍后</string>
+    <string name="update_up_to_date">已是最新版本</string>
+    <string name="update_check_failed">检查更新失败，请检查网络（GitHub 在部分网络下可能无法访问）。</string>
+    <string name="update_checking">正在检查更新…</string>
+    <string name="update_download_started">已开始下载…</string>
+    <string name="update_download_done">下载完成，点击通知即可安装。</string>
+    <string name="update_download_stalled_title">应用内下载没有进展</string>
+    <string name="update_download_stalled_message">发布包托管在 GitHub 上，应用直连可能被拦截。改用浏览器打开下载链接试试？浏览器可以走你已有的代理。</string>
+    <string name="update_action_open_browser">用浏览器打开</string>
+    <string name="update_open_failed">无法打开浏览器，请手动访问 GitHub 上的 Releases 页面。</string>
+
     <string name="setup_title">连接到 OpenFic</string>
     <string name="setup_subtitle">输入运行 OpenFic 后端的地址。数据全部保存在你自己的服务器上。</string>
     <string name="setup_server_label">服务器地址</string>

@@ -81,6 +81,27 @@ keyPassword=…
 
 （在 Windows 的 git-bash 下不要用 `apksigner.bat`：本仓库路径含中文，cmd.exe 会把它变成乱码。）
 
+### 发布流程
+
+1. **同时递增 `versionCode` 和 `versionName`**（`app/build.gradle.kts`）。
+
+   `versionCode` 必须严格递增，否则 Android 会拒绝覆盖安装 —— 这台设备上装了旧版就直接报错，
+   用户必须先卸载。`versionName` 则用于界面显示和应用的「检查更新」比对。
+
+   版本号建议沿用 `<上游版本>-android.<构建号>`，例如上游 0.11.1 上的第二次发布是
+   `0.11.1-android.2`。这样既看得出基于哪版上游，又不会和上游的 `v*` tag 撞车。
+   应用的版本比对是按数字逐段进行的（`parseVersion` 提取所有数字段），所以
+   `0.12.0-android.1` 会被正确判定为比 `0.11.1-android.2` 新。
+
+2. 构建：`.toolchain/build.sh assembleRelease`（或 `./gradlew assembleRelease`）
+3. 打 tag：`android-v<版本号>`（`android-` 前缀用于避开上游的 `v*` tag）
+4. 在 GitHub 上创建 Release 并附上 `app-release.apk`
+
+> [!IMPORTANT]
+> **发布后务必自己装一遍。** `assembleRelease` 与 `assembleDebug` 是两条不同的构建路径
+> （签名不同、`BuildConfig.DEBUG` 不同、WebView 调试关闭），而发布包又是不可调试的
+> （`run-as` 会被拒绝），出问题时排查手段比 debug 版少得多。
+
 `android/app/build.gradle.kts` 里的 `copyFrontendDist` 任务会把 `frontend/dist/` 复制到
 `app/src/main/assets/www/`。该目录是构建产物，已加入 `.gitignore`；如果 `frontend/dist`
 不存在，构建会直接报错并提示你先构建前端。
@@ -127,6 +148,10 @@ IndexedDB 里 —— 这些按项目 id 索引，属于**上一个**后端。不
 
 默认部署（不带密码的 Docker / `openfic serve`）用「内置界面」即可。**如果某个后端设了访问密码，把那个实例设成「服务器界面」。**
 
+这不是取巧，是浏览器的硬性规则：内置界面下页面来源是 `appassets.androidplatform.net`，而接口在你的服务器上，两者跨站；后端下发的登录 Cookie 标了 `SameSite=Lax`，跨站请求不会附带它。实测的现象是登录接口返回 200、`Set-Cookie` 也下发了，但后续每个请求在服务端看到的都是「未认证」。而 `SameSite=None` 要求 Cookie 必须同时是 `Secure`，也就是必须 HTTPS —— 局域网后端通常做不到。
+
+服务界面下页面与接口同源，Cookie 是第一方的，一切正常。应用会在检测到这种情况时直接提示并支持一键切换。
+
 ## 已做的适配
 
 - **沉浸式与安全区**：`MainActivity` 用 `WindowCompat.setDecorFitsSystemWindows(false)` 开启 edge-to-edge，再把系统栏与输入法的 inset 作为 padding 施加到 WebView 上。这样整个 Web 视口始终位于安全区内——刘海屏、手势导航条、弹出键盘都不会遮挡内容，前端 CSS 一行都不用改。
@@ -138,6 +163,8 @@ IndexedDB 里 —— 这些按项目 id 索引，属于**上一个**后端。不
 - **平板**：不锁定方向、不限屏幕尺寸，`resizeableActivity` 打开，支持分屏；布局沿用前端既有的 768px 断点。
 - **纯 HTTP 后端**：LAN 上的后端通常是明文 HTTP，而内置页面来自 secure origin，所以放开了 mixed content 与 cleartext（见 `res/xml/network_security_config.xml`）。
 - **原生界面跟随应用语言**：语言是同步到后端的应用设置，由前端通过 `openficAndroidHost.publishLanguage` 上报、原生侧持久化，各 Activity 在 `attachBaseContext` 里套一层对应 locale。否则应用设成中文、设备是英文时，原生界面会一直显示英文。首次启动（还没连过任何后端、前端尚未运行）会回退到系统语言。
+- **检查更新**：启动时自动检查一次、设置里也可手动触发，比对 GitHub Releases 的版本号。发现新版本时弹原生对话框，**优先走应用内下载**；DownloadManager 在无法访问 GitHub 的网络下会长时间静默无进展，所以会观察十几秒的实际字节数 —— 有进展就交给完成通知，失败或没动静则提示改用浏览器（浏览器能走用户已有的代理）。
+- **密码后端的引导**：内置界面在密码后端上必然登录失败（见「界面来源」），应用会在加载前先探测 `auth/status`，命中就直接弹出说明并提供**一键切到服务器界面**，而不是把用户丢在一个怎么输都失败的登录页上。
 
 ## 对上游前端做的改动
 
