@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    OpenFic backends are typically reached over plain HTTP on a LAN (the CLI binds
+    0.0.0.0:8000 with no TLS of its own), so cleartext has to be permitted for arbitrary
+    user-entered hosts. There is no fixed allowlist to write here — the address is whatever
+    the user types on the setup screen.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

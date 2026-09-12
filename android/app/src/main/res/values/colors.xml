@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors the SPA's own surface colours so the strips behind the system bars blend. -->
+    <color name="app_background">#FFFFFFFF</color>
+    <color name="app_text_primary">#FF18181B</color>
+    <color name="app_text_secondary">#FF71717A</color>
+    <color name="setup_error">#FFDC2626</color>
+    <color name="setup_success">#FF16A34A</color>
+</resources>

@@ -1,0 +1,3 @@
+# The React bundle is copied here from ../../frontend/dist by the `copyFrontendDist`
+# Gradle task on every build; it is a build artifact, never a source file.
+www/

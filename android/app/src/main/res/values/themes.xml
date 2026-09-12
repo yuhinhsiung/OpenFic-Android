@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        MainActivity draws edge-to-edge via WindowCompat.setDecorFitsSystemWindows(false) and
+        pads its content by the system bar and IME insets itself, so this theme deliberately
+        sets no system bar colours.
+    -->
+    <style name="Theme.OpenFic" parent="Theme.Material3.DayNight.NoActionBar" />
+</resources>

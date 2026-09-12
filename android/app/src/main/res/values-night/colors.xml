@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="app_background">#FF18181B</color>
+    <color name="app_text_primary">#FFF4F4F5</color>
+    <color name="app_text_secondary">#FFA1A1AA</color>
+    <color name="setup_error">#FFF87171</color>
+    <color name="setup_success">#FF4ADE80</color>
+</resources>

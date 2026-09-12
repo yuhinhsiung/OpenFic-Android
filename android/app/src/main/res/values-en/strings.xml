@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenFic</string>
+
+    <string name="loading_connecting">Connecting to server…</string>
+
+    <string name="error_title">Can\'t reach the server</string>
+    <string name="error_no_server">No server address has been set yet.</string>
+    <string name="error_unreachable">Tried %1$s but got no response.\n\nCheck that the backend is running and that this device is on the same network.</string>
+    <string name="error_load_failed">Page failed to load: %1$s</string>
+
+    <string name="action_retry">Retry</string>
+    <string name="action_server_settings">Change server address</string>
+    <string name="action_test_connection">Test connection</string>
+    <string name="action_connect">Connect</string>
+
+    <string name="setup_title">Connect to OpenFic</string>
+    <string name="setup_subtitle">Enter the address of your OpenFic backend. All data stays on your own server.</string>
+    <string name="setup_server_label">Server address</string>
+    <string name="setup_server_help">For example 192.168.1.10:8000, nas.local:8000 or https://openfic.example.com. http:// is assumed when no scheme is given.</string>
+    <string name="setup_ui_source_label">Interface source</string>
+    <string name="setup_ui_source_bundled">Bundled interface (recommended)</string>
+    <string name="setup_ui_source_server">Server interface</string>
+    <string name="ui_source_bundled_hint">Uses the interface packaged in the app: faster startup, and it still works when the backend does not serve the frontend. Note: if the backend requires a password, cross-origin cookies may prevent sign-in.</string>
+    <string name="ui_source_server_hint">Loads the interface served by your backend, fully same-origin. It follows backend updates automatically and signs in correctly when a password is set.</string>
+
+    <string name="probe_empty">Enter a server address first.</string>
+    <string name="probe_bad_scheme">The address must start with http:// or https://.</string>
+    <string name="probe_running">Testing…</string>
+    <string name="probe_ok">Connected. The server is reachable.</string>
+    <string name="probe_ok_version">Connected. Server version %1$s.</string>
+    <string name="probe_failed">Connection failed: %1$s</string>
+</resources>

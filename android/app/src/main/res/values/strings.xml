@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenFic</string>
+
+    <string name="loading_connecting">正在连接服务器…</string>
+
+    <string name="error_title">无法连接到服务器</string>
+    <string name="error_no_server">尚未设置服务器地址。</string>
+    <string name="error_unreachable">已尝试连接 %1$s，但没有收到响应。\n\n请确认后端已启动，且手机与服务器处于同一网络。</string>
+    <string name="error_load_failed">页面加载失败：%1$s</string>
+
+    <string name="action_retry">重试</string>
+    <string name="action_server_settings">修改服务器地址</string>
+    <string name="action_test_connection">测试连接</string>
+    <string name="action_connect">连接</string>
+
+    <string name="setup_title">连接到 OpenFic</string>
+    <string name="setup_subtitle">输入运行 OpenFic 后端的地址。数据全部保存在你自己的服务器上。</string>
+    <string name="setup_server_label">服务器地址</string>
+    <string name="setup_server_help">例如 192.168.1.10:8000、nas.local:8000 或 https://openfic.example.com。不填协议时默认使用 http://</string>
+    <string name="setup_ui_source_label">界面来源</string>
+    <string name="setup_ui_source_bundled">内置界面（推荐）</string>
+    <string name="setup_ui_source_server">服务器界面</string>
+    <string name="ui_source_bundled_hint">使用随 App 打包的界面，启动更快，服务器未提供界面时也能用。注意：如果后端设置了访问密码，跨域 Cookie 可能无法登录。</string>
+    <string name="ui_source_server_hint">直接加载服务器提供的界面，与后端完全同源。后端更新后界面自动同步，且设置了访问密码时可以正常登录。</string>
+
+    <string name="probe_empty">请先填写服务器地址。</string>
+    <string name="probe_bad_scheme">地址需要以 http:// 或 https:// 开头。</string>
+    <string name="probe_running">正在测试…</string>
+    <string name="probe_ok">连接成功，服务器可用。</string>
+    <string name="probe_ok_version">连接成功，服务器版本 %1$s。</string>
+    <string name="probe_failed">连接失败：%1$s</string>
+</resources>
