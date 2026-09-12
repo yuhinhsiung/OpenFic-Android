@@ -1,4 +1,3 @@
-import NumberFlow from "@number-flow/react";
 import { Box, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,7 +23,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import { CircularProgress, ConfirmDialog, Spinner, toast, getModelValue } from "@/components";
+import { CircularProgress, ConfirmDialog, SafeNumberFlow, Spinner, toast, getModelValue } from "@/components";
 import { AgentBrandIcon } from "@/components/agent-brand-icon";
 import { useAppShell } from "@/features/app-shell";
 import { appendMentionMarkup } from "@/features/assistant/lib/mention-text";
@@ -266,7 +265,7 @@ function AnimatedTokenCount({ value }: { value: number }) {
   const display = getAnimatedTokenDisplay(value);
 
   return (
-    <NumberFlow
+    <SafeNumberFlow
       value={display.value}
       suffix={display.suffix}
       locales="en-US"

@@ -1233,3 +1233,20 @@
     0 2px 8px rgba(0, 0, 0, 0.32),
     0 0 0 1px var(--gray-a4);
 }
+
+/*
+ * Task titles are auto-generated and long ("New session - 2026-09-10T14:59:40.337Z").
+ * Desktop truncates them and leans on the `title` tooltip, but a touch device has no hover,
+ * so a truncated title is simply unreadable. Let it take a second line instead.
+ */
+@media (max-width: 767px) {
+  .ai-sidebar-task-title,
+  .ai-sidebar-task-subtitle {
+    white-space: normal;
+    text-overflow: clip;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.3;
+  }
+}

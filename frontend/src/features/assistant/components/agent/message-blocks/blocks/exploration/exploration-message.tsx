@@ -1,4 +1,3 @@
-import NumberFlow from "@number-flow/react";
 import { Box, Text } from "@radix-ui/themes";
 import { Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -7,6 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { AgentMessageRenderer } from "../../../agent-message-renderer";
 import type { ExplorationSummary } from "../../../display/agent-message-display-items";
+import { SafeNumberFlow } from "@/components";
 import type { AgentBlockDisplayMessage } from "../../../display/display-message-types";
 import {
   MessageBlockContent,
@@ -134,7 +134,7 @@ function ExplorationMessageView({ messages, summary }: ExplorationMessageProps) 
                       x: { duration: 0.18, ease: [0.22, 1, 0.36, 1] },
                     }}
                   >
-                    <NumberFlow
+                    <SafeNumberFlow
                       value={item.value}
                       locales="zh-CN"
                       format={{ maximumFractionDigits: 0 }}

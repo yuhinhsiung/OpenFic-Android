@@ -45,3 +45,4 @@ export { MultiSelectField } from "./multi-select-field";
 export type { MultiSelectFieldProps, MultiSelectOption } from "./multi-select-field";
 export { UnitTextField } from "./unit-text-field";
 export type { UnitTextFieldProps } from "./unit-text-field";
+export { SafeNumberFlow } from "./number-flow-safe";

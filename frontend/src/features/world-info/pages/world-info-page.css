@@ -137,3 +137,34 @@
   width: 4px;
   background: var(--accent-a5);
 }
+
+/*
+ * Entry titles are single-line with an ellipsis on desktop, where the list column is wide
+ * enough for most names. On a phone the list is a full-width drawer and the title is the
+ * only thing distinguishing one entry from another — names like
+ * "战略地理：汴京、河北、河东、燕云、陕西、江淮" were being cut to
+ * "战略地理：汴京、河北、河东、燕…". Let them wrap to two lines at a step smaller instead.
+ */
+.world-info-entry-name {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  /* Doubled class: the element carries Radix's `rt-r-size-2`, which is the same
+     specificity and is emitted later in the bundle, so a plain `.world-info-entry-name`
+     would lose the font-size race. */
+  .world-info-entry-name.world-info-entry-name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    text-overflow: clip;
+    white-space: normal;
+    font-size: var(--font-size-1);
+    line-height: 1.35;
+  }
+}

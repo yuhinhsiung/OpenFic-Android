@@ -373,12 +373,8 @@ function EntryListItemComponent({
                 <Text
                   size="2"
                   weight="medium"
+                  className="world-info-entry-name"
                   style={{
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    display: "block",
-                    width: "100%",
                     color: textColor,
                     userSelect: "none",
                     WebkitUserSelect: "none",

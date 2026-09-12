@@ -1265,29 +1265,35 @@
     margin-right: -4px;
     margin-left: -4px;
     padding: 14px 4px 0;
+    /*
+     * The yearly heatmap is a fixed 780px so a whole year reads at once on desktop, and the
+     * frame scrolls. On a phone that scroll was invisible — the chart just looked cut off —
+     * so fade the right edge to advertise that there is more to the right.
+     */
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
   }
 
-  .dashboard-writing-stack {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 8px;
-  }
-
+  /*
+   * Above this breakpoint the two stat grids deliberately alternate card widths — 3/3 then
+   * 2/4 of a six-column grid — for visual rhythm. At phone width that reads as two random
+   * sizes side by side, so switch to an even two-column grid and let the spans collapse.
+   */
+  .dashboard-writing-stack,
   .dashboard-llm-metric-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
+  .dashboard-writing-stack .dashboard-writing-stat-card:nth-child(1),
+  .dashboard-writing-stack .dashboard-writing-stat-card:nth-child(2),
+  .dashboard-writing-stack .dashboard-writing-stat-card:nth-child(3),
+  .dashboard-writing-stack .dashboard-writing-stat-card:nth-child(4),
   .dashboard-llm-metric-grid .dashboard-metric-card:nth-child(1),
-  .dashboard-llm-metric-grid .dashboard-metric-card:nth-child(2) {
-    grid-column: span 3;
-  }
-
-  .dashboard-llm-metric-grid .dashboard-metric-card:nth-child(3) {
-    grid-column: span 2;
-  }
-
+  .dashboard-llm-metric-grid .dashboard-metric-card:nth-child(2),
+  .dashboard-llm-metric-grid .dashboard-metric-card:nth-child(3),
   .dashboard-llm-metric-grid .dashboard-metric-card:nth-child(4) {
-    grid-column: span 4;
+    grid-column: span 1;
   }
 
   .dashboard-writing-stat-card {

@@ -1,6 +1,6 @@
-import NumberFlow from "@number-flow/react";
 import type { Format } from "@number-flow/react";
 import { Card } from "@radix-ui/themes";
+import { SafeNumberFlow } from "@/components";
 import type { ReactNode } from "react";
 
 interface MetricCardHintPartNumber {
@@ -56,7 +56,7 @@ export function MetricCard({
         part.kind === "text" ? (
           <span key={`${part.kind}-${index}`}>{part.value}</span>
         ) : (
-          <NumberFlow
+          <SafeNumberFlow
             key={`${part.kind}-${index}`}
             value={part.value}
             locales="zh-CN"
@@ -82,7 +82,7 @@ export function MetricCard({
         data-loading="false"
       >
         {prefix}
-        <NumberFlow
+        <SafeNumberFlow
           value={displayValue}
           locales="zh-CN"
           format={valueFormat}

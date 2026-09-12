@@ -1,6 +1,6 @@
 import { ResponsiveTimeRange, type CalendarTooltipProps } from "@nivo/calendar";
-import NumberFlow from "@number-flow/react";
 import { Card } from "@radix-ui/themes";
+import { SafeNumberFlow } from "@/components";
 import { Flame } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -247,14 +247,14 @@ export function WritingDashboardTab({
             </aside>
             <div className="dashboard-year-calendar-main">
               <div className="dashboard-year-summary">
-                <NumberFlow
+                <SafeNumberFlow
                   value={selectedYear}
                   locales="zh-CN"
                   format={{ maximumFractionDigits: 0, useGrouping: false }}
                   className="dashboard-number-flow dashboard-number-flow-inline"
                 />{" "}
                 {t("dashboard.charts.yearSummaryMiddle")}{" "}
-                <NumberFlow
+                <SafeNumberFlow
                   value={activeDays}
                   locales="zh-CN"
                   format={{ maximumFractionDigits: 0, useGrouping: false }}
