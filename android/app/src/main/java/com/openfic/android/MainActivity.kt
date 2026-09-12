@@ -33,6 +33,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewAssetLoader
 import com.openfic.android.storage.AppPreferencesStore
 import com.openfic.android.storage.UiSource
+import com.openfic.android.storage.localizedContext
 import com.openfic.android.databinding.ActivityMainBinding
 import com.openfic.android.web.AndroidHostBridge
 import com.openfic.android.web.BackendProbe
@@ -88,6 +89,10 @@ class MainActivity : AppCompatActivity() {
                 null
             },
         )
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(localizedContext(newBase))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -270,6 +275,14 @@ class MainActivity : AppCompatActivity() {
         instancesLauncher.launch(Intent(this, InstancesActivity::class.java))
     }
 
+    /**
+     * Persisted so the native screens can resolve their strings in the app's language; they
+     * are recreated (or already gone) by the time the user next opens one.
+     */
+    private fun onLanguageChanged(languageTag: String) {
+        preferences.saveLanguage(languageTag)
+    }
+
     private fun onOriginResetCompleted() {
         Log.d(TAG, "origin storage cleared")
         pendingOriginReset?.let { continuation ->
@@ -324,6 +337,7 @@ class MainActivity : AppCompatActivity() {
             addJavascriptInterface(
                 AndroidHostBridge(
                     onAppearanceChanged = ::applyTheme,
+                    onLanguageChanged = ::onLanguageChanged,
                     onOpenInstanceManagerRequested = ::openInstanceManager,
                     onOriginResetCompleted = ::onOriginResetCompleted,
                 ),

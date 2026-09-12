@@ -41,6 +41,8 @@ data class BackendInstance(
 data class AppPreferences(
     val instances: List<BackendInstance>,
     val activeInstanceId: String?,
+    /** BCP-47 tag the SPA reported, used to localise the native screens. Null until it does. */
+    val language: String?,
 ) {
     val activeInstance: BackendInstance?
         get() = instances.firstOrNull { it.id == activeInstanceId }
@@ -55,7 +57,12 @@ class AppPreferencesStore(context: Context) {
     fun read(): AppPreferences = AppPreferences(
         instances = readInstances(),
         activeInstanceId = prefs.getString(KEY_ACTIVE_INSTANCE, null),
+        language = prefs.getString(KEY_LANGUAGE, null)?.takeIf { it.isNotBlank() },
     )
+
+    fun saveLanguage(language: String) {
+        prefs.edit { putString(KEY_LANGUAGE, language) }
+    }
 
     /** Adds a new instance and makes it active. Returns the new id. */
     fun addInstance(name: String, url: String, uiSource: UiSource): String {
@@ -163,6 +170,7 @@ class AppPreferencesStore(context: Context) {
         const val PREFS_NAME = "openfic_android_prefs"
         const val KEY_INSTANCES = "instances"
         const val KEY_ACTIVE_INSTANCE = "active_instance_id"
+        const val KEY_LANGUAGE = "ui_language"
 
         /** Written by builds that supported only one backend. */
         const val KEY_LEGACY_SERVER_URL = "server_url"

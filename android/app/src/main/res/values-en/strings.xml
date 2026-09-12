@@ -17,6 +17,7 @@
     <string name="action_delete">Delete</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_edit">Edit</string>
+    <string name="action_back">Back</string>
 
     <string name="instances_title">Instances</string>
     <string name="instances_subtitle">Tap an instance to switch to it; the app reloads and connects to that backend.</string>

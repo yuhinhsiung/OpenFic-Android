@@ -1,5 +1,6 @@
 package com.openfic.android
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
 import android.os.Bundle
@@ -15,6 +16,7 @@ import com.openfic.android.databinding.ActivityInstancesBinding
 import com.openfic.android.databinding.ItemInstanceBinding
 import com.openfic.android.storage.AppPreferencesStore
 import com.openfic.android.storage.BackendInstance
+import com.openfic.android.storage.localizedContext
 
 /**
  * The Android counterpart of the desktop client's "instances" menu: lists the saved backends,
@@ -33,6 +35,10 @@ class InstancesActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult(),
     ) { render() }
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(localizedContext(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -43,6 +49,9 @@ class InstancesActivity : AppCompatActivity() {
 
         binding.addButton.setOnClickListener { openEditor(instanceId = null) }
         binding.emptyAddButton.setOnClickListener { openEditor(instanceId = null) }
+        // This screen is reached from the web UI, so the system back gesture is the only way
+        // out; give it a visible affordance too.
+        binding.backButton.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
     }
 
     override fun onResume() {

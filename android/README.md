@@ -106,6 +106,7 @@ IndexedDB 里 —— 这些按项目 id 索引，属于**上一个**后端。不
 - **外链**：非本站、非后端的 http(s) 链接交给系统浏览器，不会把 App 导航走。
 - **平板**：不锁定方向、不限屏幕尺寸，`resizeableActivity` 打开，支持分屏；布局沿用前端既有的 768px 断点。
 - **纯 HTTP 后端**：LAN 上的后端通常是明文 HTTP，而内置页面来自 secure origin，所以放开了 mixed content 与 cleartext（见 `res/xml/network_security_config.xml`）。
+- **原生界面跟随应用语言**：语言是同步到后端的应用设置，由前端通过 `openficAndroidHost.publishLanguage` 上报、原生侧持久化，各 Activity 在 `attachBaseContext` 里套一层对应 locale。否则应用设成中文、设备是英文时，原生界面会一直显示英文。首次启动（还没连过任何后端、前端尚未运行）会回退到系统语言。
 
 ## 对上游前端做的改动
 

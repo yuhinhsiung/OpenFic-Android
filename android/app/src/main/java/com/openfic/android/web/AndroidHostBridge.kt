@@ -19,6 +19,7 @@ import org.json.JSONObject
  */
 class AndroidHostBridge(
     private val onAppearanceChanged: (isDark: Boolean) -> Unit,
+    private val onLanguageChanged: (languageTag: String) -> Unit,
     private val onOpenInstanceManagerRequested: () -> Unit,
     private val onOriginResetCompleted: () -> Unit,
 ) {
@@ -32,8 +33,15 @@ class AndroidHostBridge(
         mainHandler.post { onAppearanceChanged(isDark) }
     }
 
+    /**
+     * The SPA owns the language setting and reports it at startup and on every change; the
+     * native screens read it back so they do not stay stuck on the device locale.
+     */
     @JavascriptInterface
-    fun publishLanguage(language: String) = Unit
+    fun publishLanguage(language: String) {
+        val tag = language.trim().takeIf { it.isNotEmpty() } ?: return
+        mainHandler.post { onLanguageChanged(tag) }
+    }
 
     @JavascriptInterface
     fun publishSocketDiagnostic(payloadJson: String) {
@@ -73,7 +81,12 @@ class AndroidHostBridge(
               var native = window.$INTERFACE_NAME;
               if (!native || window.openficAndroidHost) return;
               function call(name, payload) {
-                try { native[name](payload == null ? "" : JSON.stringify(payload)); }
+                // Strings go through verbatim; everything else is JSON-encoded, so each
+                // native method receives exactly one predictable argument.
+                var encoded = typeof payload === "string"
+                  ? payload
+                  : (payload == null ? "" : JSON.stringify(payload));
+                try { native[name](encoded); }
                 catch (error) { /* host disappeared mid-flight; nothing to recover */ }
               }
               window.openficAndroidHost = {

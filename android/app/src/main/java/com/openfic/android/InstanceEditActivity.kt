@@ -1,5 +1,6 @@
 package com.openfic.android
 
+import android.content.Context
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
@@ -12,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import com.openfic.android.databinding.ActivityInstanceEditBinding
 import com.openfic.android.storage.AppPreferencesStore
 import com.openfic.android.storage.UiSource
+import com.openfic.android.storage.localizedContext
 import com.openfic.android.storage.normalizeServerUrl
 import com.openfic.android.web.BackendProbe
 import com.openfic.android.web.ProbeResult
@@ -28,6 +30,10 @@ class InstanceEditActivity : AppCompatActivity() {
     private lateinit var binding: ActivityInstanceEditBinding
     private lateinit var preferences: AppPreferencesStore
     private var editingId: String? = null
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(localizedContext(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +62,8 @@ class InstanceEditActivity : AppCompatActivity() {
         binding.testButton.setOnClickListener { runProbe() }
         binding.saveButton.setOnClickListener { save() }
         binding.deleteButton.setOnClickListener { confirmDelete() }
+        // Back discards, matching the system back gesture; "Save" is the explicit commit.
+        binding.backButton.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
     }
 
     private fun selectedUiSource(): UiSource =
