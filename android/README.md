@@ -1,6 +1,9 @@
 # OpenFic for Android
 
-OpenFic 的 Android 客户端，同时适配**手机**与**平板**。
+[OpenFic](https://github.com/syrizelink/OpenFic) 的 Android 客户端，同时适配**手机**与**平板**。
+
+本仓库（`OpenFic-Android`）是从上游 fork 出来的，只承载安卓客户端这一侧的改动，
+**不向上游提交任何内容**；上游更新用 `git fetch upstream && git merge upstream/main` 合并进来。
 
 与桌面版不同，Android 端**不内置后端**：它连接你自己运行的 OpenFic 服务（Docker、`openfic serve`，或桌面版拉起的本地服务）。项目数据仍然只保存在那台服务器上，手机不落一份。
 

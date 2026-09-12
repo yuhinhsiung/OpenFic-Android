@@ -1,3 +1,30 @@
+# OpenFic-Android
+
+> [!IMPORTANT]
+> **本仓库是基于 [OpenFic](https://github.com/syrizelink/OpenFic) 的 Android 客户端**，从上游 fork 而来。
+>
+> OpenFic 本身是一个 AI Native 的跨平台小说创作工具，官方提供 Windows / macOS / Linux 桌面端和浏览器端。
+> 本仓库在它之上增加了 **Android 手机与平板**的原生客户端：把前端产物打包进 APK，用一个轻量 WebView 壳
+> 连接**你自己运行的** OpenFic 后端 —— 手机上不需要跑 Python，项目数据仍然只存在你的服务器上。
+>
+> | | |
+> | --- | --- |
+> | 安卓模块源码 | [`android/`](./android) |
+> | 构建方式、使用说明、已知限制 | [`android/README.md`](./android/README.md) |
+> | 窄屏排版问题排查记录与测试方法 | [`android/MOBILE-LAYOUT-QA.md`](./android/MOBILE-LAYOUT-QA.md) |
+> | 品牌图标转换脚本 | [`android/tools/svg_to_vector.py`](./android/tools/svg_to_vector.py) |
+>
+> 构建方式简述：先用 `pnpm build` 构建前端，再在 `android/` 下 `./gradlew assembleDebug`。
+>
+> **与上游的关系**：本仓库只做安卓客户端这一侧的事，**不向上游提交任何改动**。
+> 同步上游更新：`git fetch upstream && git merge upstream/main`。
+>
+> **许可**：上游为 Apache-2.0，本仓库沿用同一许可，详见 [LICENSE](./LICENSE)。版权归上游作者及贡献者所有。
+
+---
+
+> 以下内容来自上游仓库，描述的是 **OpenFic 项目本身**（后端 / 前端 / 桌面端），保留原文以便对照。
+
 # OpenFic
 
 ![GitHub Repo stars](https://img.shields.io/github/stars/syrizelink/OpenFic)

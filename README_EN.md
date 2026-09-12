@@ -1,3 +1,35 @@
+# OpenFic-Android
+
+> [!IMPORTANT]
+> **This repository is the Android client for [OpenFic](https://github.com/syrizelink/OpenFic)**, forked from upstream.
+>
+> OpenFic itself is an AI-native, cross-platform writing tool for fiction authors, shipped upstream for
+> Windows / macOS / Linux and the browser. This repository adds a native **Android phone and tablet**
+> client on top of it: the web frontend is bundled into the APK and hosted by a thin WebView shell that
+> connects to an OpenFic backend **you run yourself** — no Python on the phone, and your project data
+> still lives only on your own server.
+>
+> | | |
+> | --- | --- |
+> | Android module source | [`android/`](./android) |
+> | Build steps, usage, known limitations | [`android/README.md`](./android/README.md) |
+> | Narrow-screen layout investigation and test method | [`android/MOBILE-LAYOUT-QA.md`](./android/MOBILE-LAYOUT-QA.md) |
+> | Brand SVG → Android vector icon script | [`android/tools/svg_to_vector.py`](./android/tools/svg_to_vector.py) |
+>
+> Build in short: run `pnpm build` in `frontend/`, then `./gradlew assembleDebug` in `android/`.
+>
+> **Relationship to upstream**: this repository only carries the Android client work and **does not
+> contribute anything back upstream**. To pull upstream changes:
+> `git fetch upstream && git merge upstream/main`.
+>
+> **License**: upstream is Apache-2.0 and this fork keeps the same license — see [LICENSE](./LICENSE).
+> Copyright remains with the upstream authors and contributors.
+
+---
+
+> Everything below is the upstream README, kept verbatim. It describes the **OpenFic project itself**
+> (backend / frontend / desktop).
+
 # OpenFic
 
 ![GitHub Repo stars](https://img.shields.io/github/stars/syrizelink/OpenFic)
