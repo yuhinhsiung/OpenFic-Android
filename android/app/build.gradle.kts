@@ -1,9 +1,23 @@
 import org.gradle.api.tasks.Copy
+import java.util.Properties
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+/**
+ * Release signing, read from `android/keystore.properties` — which is git-ignored along with
+ * the keystore itself. Kept optional on purpose: without it `assembleRelease` still runs and
+ * produces an unsigned APK, so a fresh clone stays buildable by anyone. Only whoever holds
+ * the keystore can produce an installable release.
+ */
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val releaseStoreFile = keystoreProperties.getProperty("storeFile")
+val hasReleaseSigning = !releaseStoreFile.isNullOrBlank()
 
 /**
  * The Android client ships the same React bundle the Electron shell uses, so the app
@@ -32,6 +46,17 @@ android {
     namespace = "com.openfic.android"
     compileSdk = 35
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile!!)
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.openfic.android"
         minSdk = 26
@@ -48,6 +73,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

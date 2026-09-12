@@ -6,5 +6,10 @@ local.properties
 .idea/
 captures/
 
+# Release signing material. Must never be committed — and must never be lost: Android only
+# accepts an update signed with the same key, so losing it means users have to uninstall.
+keystore/
+keystore.properties
+
 # Packaged by the `copyFrontendDist` Gradle task from ../frontend/dist.
 app/src/main/assets/www/

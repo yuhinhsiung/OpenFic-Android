@@ -53,6 +53,34 @@ cd ../android
 Windows 上在 PowerShell 或 cmd 里用 `.\gradlew.bat assembleDebug`，效果相同。第一次运行
 会下载 Gradle 发行包（约 130 MB）。
 
+### 发布签名
+
+`assembleRelease` 从 `android/keystore.properties` 读取签名信息（连同 `android/keystore/` 下的
+密钥库文件，两者都已加入 `.gitignore`，**不会进版本库**）：
+
+```properties
+storeFile=keystore/openfic-release.jks
+storePassword=…
+keyAlias=openfic
+keyPassword=…
+```
+
+这两个文件是**可选的**：没有它们时 `assembleRelease` 依然能跑，只是产出未签名的 APK，
+所以任何人 clone 下来都能自行构建。只有持有密钥库的人才能产出可安装的正式包。
+
+> [!WARNING]
+> **密钥库一旦丢失，就无法再发布能覆盖安装的更新** —— Android 只接受用同一把密钥签名的
+> 升级包，届时用户必须先卸载再装。请把 `android/keystore/` 和 `keystore.properties`
+> 备份到仓库之外的安全位置。
+
+验证签名：
+
+```bash
+"$JAVA_HOME/bin/java" -jar "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" verify --print-certs app-release.apk
+```
+
+（在 Windows 的 git-bash 下不要用 `apksigner.bat`：本仓库路径含中文，cmd.exe 会把它变成乱码。）
+
 `android/app/build.gradle.kts` 里的 `copyFrontendDist` 任务会把 `frontend/dist/` 复制到
 `app/src/main/assets/www/`。该目录是构建产物，已加入 `.gitignore`；如果 `frontend/dist`
 不存在，构建会直接报错并提示你先构建前端。
