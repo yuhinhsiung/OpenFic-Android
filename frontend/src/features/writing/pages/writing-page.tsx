@@ -29,6 +29,39 @@ import { useWritingStore } from "../store/use-writing-store";
 
 const PANEL_LAYOUT_KEY = "panel-layout.writing";
 const PANEL_IDS = ["left-sidebar", "editor", "right-sidebar"];
+
+/**
+ * Shortest device side that still fits three panes side by side.
+ *
+ * Sits between a phone (~400px) and a tablet (~800px). The shell's breakpoint only looks at
+ * width, so a phone held sideways clears it and gets the three-pane layout — but two
+ * sidebars alone want ~550px of width, and at ~400px tall every pane is too short to read.
+ *
+ * Measured from `screen`, not the viewport: on a tablet the on-screen keyboard cuts the
+ * viewport roughly in half, and a layout that flips out from under someone mid-sentence is
+ * worse than any layout this is trying to avoid. `screen` also follows rotation, so a
+ * rotate still re-evaluates.
+ */
+const MIN_PANEL_LAYOUT_SIDE = 560;
+
+function useFitsPanelLayout(isMobile: boolean): boolean {
+  const [isLargeDevice, setIsLargeDevice] = useState(
+    () => Math.min(window.screen.width, window.screen.height) >= MIN_PANEL_LAYOUT_SIDE,
+  );
+
+  useEffect(() => {
+    const update = () =>
+      setIsLargeDevice(
+        Math.min(window.screen.width, window.screen.height) >= MIN_PANEL_LAYOUT_SIDE,
+      );
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  return !isMobile && isLargeDevice;
+}
+
 const SummaryPanel = lazy(() =>
   import("../components/summary-panel").then((module) => ({ default: module.SummaryPanel })),
 );
@@ -65,7 +98,11 @@ export function WritingPage() {
   const activeTabId = useActiveTabId();
   const tabs = useTabs();
   const isTabsLoaded = useTabsLoaded();
-  const panelLayout = usePersistedPanelLayout(PANEL_LAYOUT_KEY, PANEL_IDS, !isMobile);
+  const fitsPanelLayout = useFitsPanelLayout(isMobile);
+  // Everything below that used to ask the shell "is this mobile?" is really asking "is this
+  // page showing one pane at a time?" — which is also true of a phone held sideways.
+  const isCompactLayout = !fitsPanelLayout;
+  const panelLayout = usePersistedPanelLayout(PANEL_LAYOUT_KEY, PANEL_IDS, fitsPanelLayout);
 
   const activeTab = useMemo(() => tabs.find((t) => t.id === activeTabId), [tabs, activeTabId]);
   const activeRefId = useMemo(() => activeTab?.refId ?? null, [activeTab]);
@@ -88,7 +125,7 @@ export function WritingPage() {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const mobileSidebarSwipeRef = useMobileSidebarSwipe({
-    isEnabled: isMobile,
+    isEnabled: isCompactLayout,
     isOpen: isSidebarOpen,
     onOpen: () => setIsSidebarOpen(true),
     onClose: () => setIsSidebarOpen(false),
@@ -173,7 +210,7 @@ export function WritingPage() {
   }, [allNotes, noteTreeData, syncTabs, isTabsLoaded]);
 
   useEffect(() => {
-    if (!isMobile || !isTabsLoaded || tabs.length <= 1) return;
+    if (!isCompactLayout || !isTabsLoaded || tabs.length <= 1) return;
 
     const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
     if (activeTab.refId) {
@@ -181,7 +218,7 @@ export function WritingPage() {
     } else {
       closeAllTabs();
     }
-  }, [activeTabId, closeAllTabs, isMobile, isTabsLoaded, openSingleTab, tabs]);
+  }, [activeTabId, closeAllTabs, isCompactLayout, isTabsLoaded, openSingleTab, tabs]);
 
   useEffect(() => {
     if (!projectId || !isTabsLoaded || hasInitialized.current) return;
@@ -199,7 +236,7 @@ export function WritingPage() {
       if (lastChapterId) {
         const chapter = allChapters.find((c) => c.id === lastChapterId);
         if (chapter) {
-          if (isMobile) {
+          if (isCompactLayout) {
             openSingleTab(lastChapterId, chapter.title);
           } else {
             openTab(lastChapterId, chapter.title);
@@ -209,7 +246,7 @@ export function WritingPage() {
         }
       }
 
-      if (isMobile && allChapters.length > 0) {
+      if (isCompactLayout && allChapters.length > 0) {
         const firstChapter = allChapters[0];
         openSingleTab(firstChapter.id, firstChapter.title);
         hasInitialized.current = true;
@@ -224,7 +261,7 @@ export function WritingPage() {
   }, [
     activeTabId,
     allChapters,
-    isMobile,
+    isCompactLayout,
     isTabsLoaded,
     openSingleTab,
     openTab,
@@ -243,7 +280,7 @@ export function WritingPage() {
   }, [currentChapterId, setCurrentChapter]);
 
   useEffect(() => {
-    if (!isMobile || !currentChapterId) return;
+    if (!isCompactLayout || !currentChapterId) return;
 
     const frameId = window.requestAnimationFrame(() => {
       // Mobile browsers may restore editor/title focus after chapter navigation.
@@ -251,11 +288,11 @@ export function WritingPage() {
     });
 
     return () => window.cancelAnimationFrame(frameId);
-  }, [currentChapterId, isMobile]);
+  }, [currentChapterId, isCompactLayout]);
 
   const handleSelectItem = useCallback(
     (refId: string, title: string, type: "chapter" | "note" = "chapter") => {
-      if (isMobile) {
+      if (isCompactLayout) {
         openSingleTab(refId, title, type);
         setIsSidebarOpen(false);
         return;
@@ -263,7 +300,7 @@ export function WritingPage() {
 
       openTab(refId, title, type);
     },
-    [openSingleTab, openTab, isMobile],
+    [openSingleTab, openTab, isCompactLayout],
   );
 
   const handleChapterSelect = useCallback(
@@ -318,7 +355,7 @@ export function WritingPage() {
         volumeId: targetVolumeId,
         title: t("writing.untitledChapter"),
       });
-      if (isMobile) {
+      if (isCompactLayout) {
         openSingleTab(newChapter.id, newChapter.title);
       } else {
         openTab(newChapter.id, newChapter.title);
@@ -330,7 +367,7 @@ export function WritingPage() {
     chaptersData?.volumes,
     createMutation,
     createVolumeMutation,
-    isMobile,
+    isCompactLayout,
     t,
     openSingleTab,
     openTab,
@@ -344,7 +381,7 @@ export function WritingPage() {
     (markup: string) => {
       if (!markup.trim()) return;
 
-      if (isMobile && !isAssistantSidebarOpen) {
+      if (isCompactLayout && !isAssistantSidebarOpen) {
         openAssistantSidebar();
         window.requestAnimationFrame(() => {
           appendToAssistant(markup);
@@ -354,7 +391,7 @@ export function WritingPage() {
 
       appendToAssistant(markup);
     },
-    [appendToAssistant, isAssistantSidebarOpen, isMobile, openAssistantSidebar],
+    [appendToAssistant, isAssistantSidebarOpen, isCompactLayout, openAssistantSidebar],
   );
 
   const handleOpenSummary = useCallback(() => {
@@ -391,7 +428,7 @@ export function WritingPage() {
       <PageLoadingOverlay isLoading={isPageLoading} />
 
       <Box className="writing-page-shell">
-        {!isMobile && panelLayout.isLoaded ? (
+        {fitsPanelLayout && panelLayout.isLoaded ? (
           <Group
             orientation="horizontal"
             className="writing-page-group"
@@ -472,7 +509,7 @@ export function WritingPage() {
               </Box>
             </Panel>
           </Group>
-        ) : isMobile ? (
+        ) : !fitsPanelLayout ? (
           <Flex className="writing-page-mobile-layout">
             <div className="writing-page-editor-shell writing-page-editor-shell--mobile">
               <Flex
@@ -588,7 +625,7 @@ export function WritingPage() {
         )}
       </Box>
 
-      {isMobile && (
+      {isCompactLayout && (
         <AssistantSidebarHost
           projectId={projectId}
           onStateChange={setAssistantState}

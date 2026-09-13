@@ -193,6 +193,7 @@ IndexedDB 里 —— 这些按项目 id 索引，属于**上一个**后端。不
 - `frontend/src/features/projects/components/project-list-item.tsx` — 元信息项加 `nowrap`，不再从词中间断行。
 - `frontend/src/features/world-info/{components/entry-list-item.tsx,pages/world-info-page.css}` — 条目标题移动端两行 + 缩小字号。
 - `frontend/src/features/dashboard/pages/dashboard-page.css` — 移动端统计卡片等宽、日历加滚动提示。
+- `frontend/src/features/writing/pages/writing-page.tsx` — 是否渲染三栏改按「这一页摆不摆得下」判断，而不是按 shell 的宽度断点。横屏手机宽度越过了断点但只有 ~400px 高，三栏下每栏都短得没法用；现在这种设备走单栏布局，章节与对话面板从顶栏的按钮开合（详见 `MOBILE-LAYOUT-QA.md` 第 7 条）。
 - `frontend/src/features/assistant/components/assistant-sidebar.css` — 会话标题移动端两行。
 - `frontend/src/features/app-shell/components/app-sidebar.tsx` — 侧边栏不再由 motion 驱动：它同时兼做桌面常驻栏与移动抽屉，而 motion 会把 `transform` 写成内联样式，压过抽屉的类选择器，导致横屏转竖屏后菜单卡住收不起来（详见 `MOBILE-LAYOUT-QA.md` 第 6 条）。桌面端的宽度动画改由 CSS 过渡承担。
 
