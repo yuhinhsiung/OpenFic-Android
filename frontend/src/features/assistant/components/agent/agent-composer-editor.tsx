@@ -422,15 +422,23 @@ export function AgentComposerEditor({
         editor.commands.splitBlock();
         return;
       }
-      // An open suggestion list claims Enter first: that is picking from a list, not sending.
-      if (suggestionStatus === "ready" && suggestionItems.length > 0) return;
-      if (IS_ANDROID_HOST) {
+
+      // Android has no Shift key, so plain Enter breaks the line there and the arrow button
+      // sends. A hardware keyboard still gets Ctrl/Cmd+Enter as an explicit send shortcut.
+      const isAndroidSend = IS_ANDROID_HOST && (event.ctrlKey || event.metaKey);
+      const isAndroidLineBreak = IS_ANDROID_HOST && !isAndroidSend;
+
+      // An open suggestion list claims plain Enter first: that is picking from a list, not sending.
+      if (!isAndroidSend && suggestionStatus === "ready" && suggestionItems.length > 0) return;
+
+      if (isAndroidLineBreak) {
         if (editor) {
           event.preventDefault();
           editor.commands.splitBlock();
         }
         return;
       }
+
       event.preventDefault();
       onSubmit();
     },

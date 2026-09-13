@@ -182,7 +182,7 @@ IndexedDB 里 —— 这些按项目 id 索引，属于**上一个**后端。不
 
 **输入**：
 
-- `frontend/src/features/assistant/components/agent/agent-composer-editor.tsx` — 对话输入框的回车键在安卓上改为**换行**。桌面端的映射是「回车发送、Shift+回车换行」，而手机和平板没有 Shift 键，照搬过来就等于没法写多行；现在发送只走界面上的箭头按钮（它本来就在，且只在有内容时可用）。候选列表展开时回车仍然先用于选中候选项。
+- `frontend/src/features/assistant/components/agent/agent-composer-editor.tsx` — 对话输入框的回车键在安卓上改为**换行**。桌面端的映射是「回车发送、Shift+回车换行」，而手机和平板没有 Shift 键，照搬过来就等于没法写多行；现在发送只走界面上的箭头按钮（它本来就在，且只在有内容时可用）。接了实体键盘的用 `Ctrl/⌘ + 回车` 发送。候选列表展开时回车仍然先用于选中候选项。
 
 **实例管理入口**：
 
