@@ -180,6 +180,10 @@ IndexedDB 里 —— 这些按项目 id 索引，属于**上一个**后端。不
 - `frontend/src/features/app-shell/components/{app-layout,app-sidebar}.tsx` — 设置对话框、智能体面板、侧边栏抽屉各自在**打开期间**登记，按后开先关的顺序响应返回键。登记绑定的是「打开」而不是「挂载」：抽屉和面板关闭时仍然挂载着，一个隐藏的叠层不该吞掉返回键。
 - `frontend/src/features/assistant/components/assistant-sidebar.tsx` — 手机上面板是覆盖在页面上的，返回箭头改为「离开面板」（桌面上面板是常驻分栏，没有可离开的东西，保持原语义）。区别对待是因为同一个按钮在两种布局下含义本来就不同。
 
+**输入**：
+
+- `frontend/src/features/assistant/components/agent/agent-composer-editor.tsx` — 对话输入框的回车键在安卓上改为**换行**。桌面端的映射是「回车发送、Shift+回车换行」，而手机和平板没有 Shift 键，照搬过来就等于没法写多行；现在发送只走界面上的箭头按钮（它本来就在，且只在有内容时可用）。候选列表展开时回车仍然先用于选中候选项。
+
 **实例管理入口**：
 
 - `frontend/src/features/settings/components/general-settings.tsx` — 在「通用」设置里加一节「后端实例」，点击调用 `openficAndroidHost.openInstanceManager()`。桌面外壳的实例菜单在窗口 chrome 上，安卓端没有对应位置，所以在设置页给出入口。

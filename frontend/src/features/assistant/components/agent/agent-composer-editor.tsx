@@ -42,6 +42,13 @@ export type AgentComposerSuggestionItem = AssistantMentionCandidate | AssistantC
 
 const EMPTY_SUGGESTION_ITEMS: AgentComposerSuggestionItem[] = [];
 
+/**
+ * Android has no Shift key, so the desktop mapping — Enter sends, Shift+Enter breaks the
+ * line — would leave no way to write a multi-line message there. On the app's host the
+ * keyboard's Enter always breaks the line and sending is the arrow button's job.
+ */
+const IS_ANDROID_HOST = typeof window !== "undefined" && "openficAndroidHost" in window;
+
 export interface AgentComposerSuggestionState {
   mode: AgentComposerSuggestionMode;
   items: AgentComposerSuggestionItem[];
@@ -415,7 +422,15 @@ export function AgentComposerEditor({
         editor.commands.splitBlock();
         return;
       }
+      // An open suggestion list claims Enter first: that is picking from a list, not sending.
       if (suggestionStatus === "ready" && suggestionItems.length > 0) return;
+      if (IS_ANDROID_HOST) {
+        if (editor) {
+          event.preventDefault();
+          editor.commands.splitBlock();
+        }
+        return;
+      }
       event.preventDefault();
       onSubmit();
     },
