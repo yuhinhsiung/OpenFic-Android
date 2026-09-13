@@ -59,7 +59,10 @@
 }
 
 .app-layout-assistant-sidebar[data-mobile-overlay="true"] {
-  inset: 0;
+  /* Stops at the nav rail rather than running under it: on a phone held sideways the rail is
+     docked and would swallow the panel's own left edge — its back arrow included. The
+     variable is 0 at phone width, so a portrait phone is unaffected. */
+  inset: 0 0 0 var(--app-sidebar-width);
   z-index: 60;
   background: var(--color-background);
   overflow: hidden;
