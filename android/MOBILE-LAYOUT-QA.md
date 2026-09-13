@@ -240,20 +240,17 @@ motion 只要动画过任何一个 transform 属性，就会把 `transform` 注�
 
 ## 测试方法
 
-可复用的排查手段，本机环境相关细节见 `README.md`。
-
 **观察真实画面** —— 设备截图是唯一可信的渲染结果：
 
 ```bash
 adb exec-out screencap -p > shot.png
 ```
 
-**测元素几何** —— WebView 开了调试（debug 构建），`adb forward` 后可直接用 CDP：
+**测元素几何** —— WebView 的远程调试在 debug 构建里是开着的（`MainActivity` 按
+`BuildConfig.DEBUG` 打开），`adb forward` 到它的调试端口后可以直接用 CDP 求值：
 
 ```bash
 adb forward tcp:9333 localabstract:webview_devtools_remote_$(adb shell pidof com.openfic.android)
-node .work/qa.mjs measure "<css-selector>"   # 盒子、字号、溢出、white-space
-node .work/qa.mjs eval "<js>"                # 任意检查
 ```
 
 判断"是否溢出"的通用招法：比较 `scrollWidth` 与 `clientWidth`，或找
@@ -276,21 +273,14 @@ CSS.supports("width", "round(nearest, 1px, 1px)")
 **对比法定位环境差异**：同一份前端产物分别跑在桌面浏览器和 WebView 上，
 如果只有后者出问题，方向就落在引擎能力差异上，而不是业务代码。
 
-**不依赖真实后端的整套前端验证**：`.work/mock/server.js` 一个进程同时提供
-`frontend/dist` 静态资源、`/runtime-config.json`、够用的 `/api/v1`（含 CORS，内置界面是跨域调用）
-和一个 Socket.IO 端点，应用外壳就能完整初始化。
+**不依赖真实后端的整套前端验证**：起一个最小的本地服务，同时提供 `frontend/dist` 静态资源、
+`/runtime-config.json`、够用的 `/api/v1` 和一个 Socket.IO 端点，应用外壳就能完整初始化，
+前端改动能反复验证而不必等后端。两个要点：`/api/v1` 必须带 CORS（内置界面是跨域调用）；
+`runtime-config.json` 按请求的 Host 回填，同一份服务桌面浏览器和模拟器都能用。
 
-```bash
-node .work/mock/server.js "$(cygpath -m "$PWD/repo/frontend/dist")" 8899
-```
-
-它按请求的 Host 回填 `runtime-config.json`，所以同一份服务桌面浏览器用 `127.0.0.1:8899`、
-模拟器用 `10.0.2.2:8899`，不用改任何配置。
-
-**跨断点转屏的自动化**：`.work/rotation-check.mjs` 用 Playwright 驱动系统 Edge
-（`channel: "msedge"`，无需下载浏览器），把视口在 412×915 / 915×412 之间来回切，
-并读出侧边栏的 `data-open`、内联 transform、计算后 transform 与包围盒；
-`.work/rotation-sweep.mjs` 把同样的流程套在所有一级路由和设置对话框上，
+**跨断点转屏的自动化**：用 Playwright 驱动本机已有的 Chromium（指定 `channel: "msedge"`
+就不必再下载浏览器），把视口在 412×915 / 915×412 之间来回切，读出侧边栏的 `data-open`、
+内联与计算后的 transform 以及包围盒，并把同样的流程套在所有一级路由和设置对话框上。
 判定规则是**元素自己公布的 `data-open` 必须与它是否真的在屏幕上一致**。
 
 这条判定规则是刻意选的：起初用"是否拦截点击"当判据，结果**漏掉了这个 bug**——

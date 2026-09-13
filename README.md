@@ -1,7 +1,7 @@
 # OpenFic-Android
 
 > [!IMPORTANT]
-> **本仓库是基于 [OpenFic](https://github.com/syrizelink/OpenFic) 的 Android 客户端**，从上游 fork 而来。
+> **本仓库是基于 [OpenFic](https://github.com/syrizelink/OpenFic) 的 Android 客户端。**
 >
 > OpenFic 本身是一个 AI Native 的跨平台小说创作工具，官方提供 Windows / macOS / Linux 桌面端和浏览器端。
 > 本仓库在它之上增加了 **Android 手机与平板**的原生客户端：把前端产物打包进 APK，用一个轻量 WebView 壳

@@ -1,7 +1,7 @@
 # OpenFic-Android
 
 > [!IMPORTANT]
-> **This repository is the Android client for [OpenFic](https://github.com/syrizelink/OpenFic)**, forked from upstream.
+> **This repository is the Android client for [OpenFic](https://github.com/syrizelink/OpenFic).**
 >
 > OpenFic itself is an AI-native, cross-platform writing tool for fiction authors, shipped upstream for
 > Windows / macOS / Linux and the browser. This repository adds a native **Android phone and tablet**
@@ -22,7 +22,7 @@
 > contribute anything back upstream**. To pull upstream changes:
 > `git fetch upstream && git merge upstream/main`.
 >
-> **License**: upstream is Apache-2.0 and this fork keeps the same license — see [LICENSE](./LICENSE).
+> **License**: upstream is Apache-2.0 and this repository keeps the same license — see [LICENSE](./LICENSE).
 > Copyright remains with the upstream authors and contributors.
 
 ---

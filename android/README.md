@@ -2,8 +2,9 @@
 
 [OpenFic](https://github.com/syrizelink/OpenFic) 的 Android 客户端，同时适配**手机**与**平板**。
 
-本仓库（`OpenFic-Android`）是从上游 fork 出来的，只承载安卓客户端这一侧的改动，
-**不向上游提交任何内容**；上游更新用 `git fetch upstream && git merge upstream/main` 合并进来。
+本仓库（`OpenFic-Android`）只承载安卓客户端这一侧的改动，**不向上游提交任何内容**。
+它是一个独立仓库而非 GitHub 上的 fork：上游以只读 remote 的形式接进来，
+更新用 `git fetch upstream && git merge upstream/main` 合并。
 
 与桌面版不同，Android 端**不内置后端**：它连接你自己运行的 OpenFic 服务（Docker、`openfic serve`，或桌面版拉起的本地服务）。项目数据仍然只保存在那台服务器上，手机不落一份。
 
@@ -79,8 +80,6 @@ keyPassword=…
 "$JAVA_HOME/bin/java" -jar "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" verify --print-certs app-release.apk
 ```
 
-（在 Windows 的 git-bash 下不要用 `apksigner.bat`：本仓库路径含中文，cmd.exe 会把它变成乱码。）
-
 ### 发布流程
 
 1. **同时递增 `versionCode` 和 `versionName`**（`app/build.gradle.kts`）。
@@ -95,7 +94,7 @@ keyPassword=…
    应用的版本比对是按数字逐段进行的（`parseVersion` 提取所有数字段），所以
    `0.12.0` 会被正确判定为比 `0.11.1.3` 新，`0.11.1.10` 高于 `0.11.1.9`。
 
-2. 构建：`.toolchain/build.sh assembleRelease`（或 `./gradlew assembleRelease`）
+2. 构建：`./gradlew assembleRelease`（Windows 上用 `.\gradlew.bat assembleRelease`）
 3. 打 tag：`android-v<版本号>`（`android-` 前缀用于避开上游的 `v*` tag）
 4. 在 GitHub 上创建 Release 并附上 `app-release.apk`
 
@@ -253,19 +252,6 @@ android/
    （无前导斜杠）。早期版本按带斜杠比较，导致该请求落到「文件不存在」分支并返回 null，
    WebView 转去走网络而失败，前端随即回退到相对路径 `/api/v1`，整个应用连不上后端。
    现已统一 `trimStart('/')` 后比较。
-
-### 关于本机模拟器
-
-本机一开始跑不起来模拟器：进程存活、端口 5554/5555 在监听，但 CPU 时间停在 0.34 秒不再增长，
-`adb` 始终 `offline`——看起来像 WHPX / Hyper-V 故障，其实不是。
-
-根因是 **SDK 装在非 ASCII 路径下**（本仓库路径含 `多端同步`）：qemu 子进程加载
-`bios-256k.bin` 失败，而 emulator 37.1.11 把这个错误吞掉之后直接挂起，所以看不到任何提示。
-把 SDK 移到 `D:\android-sdk`、AVD 移到 `D:\android-avd` 后立即恢复正常，
-**模拟器版本无关**（36.4.10 与 37.1.11 都可用）。
-
-排查这类「静默挂起」的一个有效手段：换一个旧版模拟器启动，它往往会把被新版吞掉的真实错误
-（这里是 `qemu: could not load PC BIOS 'bios-256k.bin'`）打印出来。
 
 ### 尚未在真机验证
 
