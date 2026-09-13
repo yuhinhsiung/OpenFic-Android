@@ -87,6 +87,9 @@ class MainActivity : AppCompatActivity() {
 
     private var pendingFileChooser: android.webkit.ValueCallback<Array<Uri>>? = null
 
+    /** Held so [leaveApp] can step aside for one dispatch and let the system finish us. */
+    private var backCallback: OnBackPressedCallback? = null
+
     /** Completed by the reset page once the origin's storage has been cleared. */
     private var pendingOriginReset: CancellableContinuation<Unit>? = null
 
@@ -196,21 +199,44 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Back asks the web app first, then falls back to web history, then to leaving.
+     *
+     * The SPA is the only side that knows about overlays: the sidebar drawer, the settings
+     * dialog and the assistant panel are not routes, so the WebView's history cannot see
+     * them and the old "go back or exit" logic closed the whole app while one was open.
+     * Route changes do push real history entries, so the middle step still walks pages.
+     */
     private fun registerBackHandling() {
-        onBackPressedDispatcher.addCallback(
-            this,
-            object : OnBackPressedCallback(true) {
-                override fun handleOnBackPressed() {
-                    val view = webView
-                    if (view != null && view.canGoBack()) {
-                        view.goBack()
-                    } else {
-                        isEnabled = false
-                        onBackPressedDispatcher.onBackPressed()
-                    }
+        val callback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val view = webView
+                if (view == null) {
+                    leaveApp()
+                    return
                 }
-            },
-        )
+                val queried = runCatching {
+                    view.evaluateJavascript(BACK_HANDLER_JS) { result ->
+                        // The result arrives JSON-encoded, so a boolean true is the string "true".
+                        if (result != "true") goBackOrLeave(view)
+                    }
+                }.isSuccess
+                if (!queried) goBackOrLeave(view)
+            }
+        }
+        backCallback = callback
+        onBackPressedDispatcher.addCallback(this, callback)
+    }
+
+    private fun goBackOrLeave(view: WebView) {
+        if (isFinishing || isDestroyed) return
+        if (view.canGoBack()) view.goBack() else leaveApp()
+    }
+
+    /** Disables our callback for one dispatch so the system's default (finish) runs. */
+    private fun leaveApp() {
+        backCallback?.isEnabled = false
+        onBackPressedDispatcher.onBackPressed()
     }
 
     // endregion
@@ -667,6 +693,13 @@ class MainActivity : AppCompatActivity() {
         const val TAG = "OpenFicMain"
         const val UA_SUFFIX = "OpenFicAndroid/1.0"
         const val ORIGIN_RESET_TIMEOUT_MS = 5_000L
+
+        /**
+         * Returns whether the SPA consumed the back press. Guarded on the function existing
+         * so a page that predates it (or failed to load) still gets the native fallback.
+         */
+        const val BACK_HANDLER_JS =
+            "window.__openficHandleBack ? window.__openficHandleBack() : false"
 
         /** How long to watch an update download before deciding it is stalled. */
         const val UPDATE_WATCH_ATTEMPTS = 8

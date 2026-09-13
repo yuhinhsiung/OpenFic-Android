@@ -10,6 +10,7 @@ import { useLocation, useNavigate, useParams } from "react-router";
 import { toast } from "@/components";
 import { useMobileSidebarSwipe } from "@/hooks/use-mobile-sidebar-swipe";
 import { saveLanguagePreference, supportedLanguages, type LanguageCode } from "@/i18n";
+import { useAndroidBackHandler } from "@/lib/android-back";
 import { apiClient, fetchProject } from "@/lib/api-client";
 import {
   getRecentProjects,
@@ -55,6 +56,10 @@ export function AppSidebar({ appearance, onToggleTheme }: AppSidebarProps) {
     isOpen: isSidebarOpen,
     onClose: closeSidebar,
   });
+
+  // The drawer is not a route, so the WebView's own history cannot close it: without this
+  // a back press with the drawer open would leave the app instead of the drawer.
+  useAndroidBackHandler(isMobile && isSidebarOpen, closeSidebar);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [isLogoHovered, setIsLogoHovered] = useState(false);

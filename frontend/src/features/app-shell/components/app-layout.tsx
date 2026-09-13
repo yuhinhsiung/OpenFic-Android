@@ -5,6 +5,7 @@ import { AssistantSidebar } from "@/features/assistant";
 import type { AssistantSidebarHandle } from "@/features/assistant";
 import { SettingsDialog } from "@/features/settings";
 import type { SettingsDialogRoute } from "@/features/settings/lib/settings-route";
+import { useAndroidBackHandler } from "@/lib/android-back";
 
 import { AppShellContext } from "./app-shell-context";
 import { AppSidebar } from "./app-sidebar";
@@ -80,6 +81,15 @@ export function AppLayout({
 
   const openAssistantSidebar = useCallback(() => setIsAssistantSidebarOpen(true), []);
   const closeAssistantSidebar = useCallback(() => setIsAssistantSidebarOpen(false), []);
+
+  // Android's back key peels off the topmost overlay before it leaves the app. Registered
+  // while the overlay is open rather than while it is mounted — the panel and dialog stay
+  // mounted while hidden, and a hidden one must not swallow the key. Order of the calls is
+  // the order they claim the key in; opening one while the other is up re-orders them.
+  const isAssistantOverlayOpen =
+    Boolean(assistantSidebarHost?.isMobileOverlay) && isAssistantSidebarOpen;
+  useAndroidBackHandler(isSettingsOpen, () => setIsSettingsOpen(false));
+  useAndroidBackHandler(isAssistantOverlayOpen, closeAssistantSidebar);
 
   useLayoutEffect(() => {
     const host = assistantSidebarHost?.host;

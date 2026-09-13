@@ -39,6 +39,11 @@ val copyFrontendDist by tasks.registering(Copy::class) {
                     "Run `pnpm install && pnpm build` in the frontend/ directory first.",
             )
         }
+        // Copy never removes files the source no longer has, so bundles from earlier builds
+        // pile up here and ship inside the APK. index.html always points at the current one,
+        // which makes the stale copies invisible — until you go looking for which bundle the
+        // installed APK actually runs.
+        delete(packagedFrontendDir)
     }
 }
 

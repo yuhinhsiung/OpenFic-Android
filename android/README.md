@@ -158,7 +158,7 @@ IndexedDB 里 —— 这些按项目 id 索引，属于**上一个**后端。不
 
 - **沉浸式与安全区**：`MainActivity` 用 `WindowCompat.setDecorFitsSystemWindows(false)` 开启 edge-to-edge，再把系统栏与输入法的 inset 作为 padding 施加到 WebView 上。这样整个 Web 视口始终位于安全区内——刘海屏、手势导航条、弹出键盘都不会遮挡内容，前端 CSS 一行都不用改。
 - **状态栏配色**：前端通过 `openficAndroidHost.publishAppearance` 上报主题，原生侧据此调整系统栏图标明暗与状态栏底色，和 App 内主题保持一致。
-- **返回键**：优先走 WebView 历史，到根再退出，符合 Android 习惯。
+- **返回键**：先问前端「这一下归你管吗」，再走 WebView 历史，最后才退出。侧边栏抽屉、设置对话框、智能体面板都不是路由，WebView 的历史看不见它们——不先问前端的话，这些界面开着时按返回会直接退出应用，而不是关掉当前这一层。前端通过 `window.__openficHandleBack` 回答（见 `frontend/src/lib/android-back.ts`），注册过的叠层按「后开先关」处理；没人认领时才回落到路由历史，都不行才退出。
 - **文件选择**：`onShowFileChooser` 接系统文件选择器（封面、角色图、附件上传）。
 - **下载**：`DownloadListener` 交给系统 `DownloadManager`（导出文稿等）。
 - **外链**：非本站、非后端的 http(s) 链接交给系统浏览器，不会把 App 导航走。
@@ -174,6 +174,12 @@ IndexedDB 里 —— 这些按项目 id 索引，属于**上一个**后端。不
 
 - `frontend/src/pwa/register-sw.ts` — 检测到 `openficAndroidHost` 时跳过 Service Worker 注册。资源本来就来自 APK，SW 没有收益，反而会让缓存跨版本残留。
 - `frontend/src/lib/desktop-appearance-bridge.ts` — 新增 `openficAndroidHost` 类型声明，并让三个 `publish*` 函数同时上报给 Android 宿主。
+
+**系统返回键**：
+
+- `frontend/src/lib/android-back.ts`（新增）— 叠层的返回栈，以及原生调用的入口 `window.__openficHandleBack`。只在检测到 `openficAndroidHost` 时安装，桌面版与 Web 版不受影响。
+- `frontend/src/features/app-shell/components/{app-layout,app-sidebar}.tsx` — 设置对话框、智能体面板、侧边栏抽屉各自在**打开期间**登记，按后开先关的顺序响应返回键。登记绑定的是「打开」而不是「挂载」：抽屉和面板关闭时仍然挂载着，一个隐藏的叠层不该吞掉返回键。
+- `frontend/src/features/assistant/components/assistant-sidebar.tsx` — 手机上面板是覆盖在页面上的，返回箭头改为「离开面板」（桌面上面板是常驻分栏，没有可离开的东西，保持原语义）。区别对待是因为同一个按钮在两种布局下含义本来就不同。
 
 **实例管理入口**：
 

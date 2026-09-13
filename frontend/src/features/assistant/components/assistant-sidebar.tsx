@@ -23,7 +23,14 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import { CircularProgress, ConfirmDialog, SafeNumberFlow, Spinner, toast, getModelValue } from "@/components";
+import {
+  CircularProgress,
+  ConfirmDialog,
+  SafeNumberFlow,
+  Spinner,
+  toast,
+  getModelValue,
+} from "@/components";
 import { AgentBrandIcon } from "@/components/agent-brand-icon";
 import { useAppShell } from "@/features/app-shell";
 import { appendMentionMarkup } from "@/features/assistant/lib/mention-text";
@@ -1342,10 +1349,22 @@ export const AssistantSidebar = forwardRef<AssistantSidebarHandle, AssistantSide
         </button>
       </span>
     );
+    // On a phone the panel is an overlay over the page, so back means leaving the panel —
+    // and because the loaded conversation stays where it is, reopening the panel returns
+    // straight to it instead of re-downloading the transcript. Picking a different
+    // conversation is the history button's job. Docked on a wide screen there is no panel
+    // to leave, so back keeps its old meaning there.
+    const canLeavePanel = isMobileOverlay && Boolean(onClose);
     const headerBackLabel = isViewingSubagent
       ? t("writing.aiSidebar.returnToPrimary")
-      : t("common.back");
-    const handleHeaderBack = isViewingSubagent ? handleReturnToPrimary : backToTaskList;
+      : canLeavePanel
+        ? t("common.close")
+        : t("common.back");
+    const handleHeaderBack = isViewingSubagent
+      ? handleReturnToPrimary
+      : canLeavePanel
+        ? onClose!
+        : backToTaskList;
 
     return (
       <Flex

@@ -17,6 +17,7 @@ import { WorldInfoPage } from "./features/world-info";
 import { WritingPage } from "./features/writing";
 // 初始化 i18n
 import i18n, { type LanguageCode } from "./i18n";
+import { installAndroidBackBridge } from "./lib/android-back";
 import { checkHealth, fetchAuthPreferences, fetchAuthStatus } from "./lib/api-client";
 import { publishDesktopAppearance, publishDesktopLanguage } from "./lib/desktop-appearance-bridge";
 import {
@@ -404,5 +405,9 @@ function Root() {
 }
 
 registerSW();
+
+// Must be installed before the first render: the Android shell calls into it on every back
+// press, and until it exists the shell falls through to closing the app.
+installAndroidBackBridge();
 
 getOrCreateRoot(document.getElementById("root")!).render(<Root />);
