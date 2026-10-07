@@ -156,7 +156,7 @@ IndexedDB 里 —— 这些按项目 id 索引，属于**上一个**后端。不
 ## 已做的适配
 
 - **沉浸式与安全区**：`MainActivity` 用 `WindowCompat.setDecorFitsSystemWindows(false)` 开启 edge-to-edge，再把系统栏与输入法的 inset 作为 padding 施加到 WebView 上。这样整个 Web 视口始终位于安全区内——刘海屏、手势导航条、弹出键盘都不会遮挡内容，前端 CSS 一行都不用改。
-- **状态栏配色**：前端通过 `openficAndroidHost.publishAppearance` 上报主题，原生侧据此调整系统栏图标明暗与状态栏底色，和 App 内主题保持一致。
+- **状态栏配色**：前端通过 `openficAndroidHost.publishAppearance` 上报主题，原生侧据此调整系统栏图标明暗与状态栏底色，和 App 内主题保持一致。底色取自上报的 `--color-background`（`themeVariables`）而不是写死的黑白——上游 0.12.0 起支持自定义主题，页面底色不再必然是白色或近黑色，写死的话选了非默认主题就会在系统栏后面露出一条色带。上报缺失或解析不出来时才回退到内置的黑白常量。
 - **返回键**：先问前端「这一下归你管吗」，再走 WebView 历史，最后才退出。侧边栏抽屉、设置对话框、智能体面板都不是路由，WebView 的历史看不见它们——不先问前端的话，这些界面开着时按返回会直接退出应用，而不是关掉当前这一层。前端通过 `window.__openficHandleBack` 回答（见 `frontend/src/lib/android-back.ts`），注册过的叠层按「后开先关」处理；没人认领时才回落到路由历史，都不行才退出。
 - **文件选择**：`onShowFileChooser` 接系统文件选择器（封面、角色图、附件上传）。
 - **下载**：`DownloadListener` 交给系统 `DownloadManager`（导出文稿等）。

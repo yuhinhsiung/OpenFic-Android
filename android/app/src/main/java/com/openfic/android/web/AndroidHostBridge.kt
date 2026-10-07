@@ -18,7 +18,7 @@ import org.json.JSONObject
  * thread by the listener implementations.
  */
 class AndroidHostBridge(
-    private val onAppearanceChanged: (isDark: Boolean) -> Unit,
+    private val onAppearanceChanged: (isDark: Boolean, backgroundHex: String?) -> Unit,
     private val onLanguageChanged: (languageTag: String) -> Unit,
     private val onOpenInstanceManagerRequested: () -> Unit,
     private val onUpdateCheckRequested: () -> Unit,
@@ -26,12 +26,22 @@ class AndroidHostBridge(
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    /**
+     * `themeVariables` carries the palette the SPA actually painted with — including any
+     * custom theme — so the strip behind the system bars can match it instead of guessing
+     * from light/dark alone. Absent (or unparseable) it falls back to the light/dark
+     * constants on the other side.
+     */
     @JavascriptInterface
     fun publishAppearance(payloadJson: String) {
-        val isDark = runCatching {
-            JSONObject(payloadJson).optString("appearance") == "dark"
-        }.getOrDefault(false)
-        mainHandler.post { onAppearanceChanged(isDark) }
+        val payload = runCatching { JSONObject(payloadJson) }.getOrNull()
+        val isDark = payload?.optString("appearance") == "dark"
+        val backgroundHex = payload
+            ?.optJSONObject("themeVariables")
+            ?.optString("--color-background")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+        mainHandler.post { onAppearanceChanged(isDark, backgroundHex) }
     }
 
     /**

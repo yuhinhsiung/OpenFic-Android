@@ -188,9 +188,17 @@ class MainActivity : AppCompatActivity() {
     /**
      * Called from the web app through the `openficAndroidHost` bridge, so the strip behind
      * the system bars matches the theme the SPA actually rendered rather than the system one.
+     *
+     * [backgroundHex] is the SPA's own `--color-background`; with custom themes the page is
+     * no longer necessarily white or near-black, and a hardcoded strip would show as a band
+     * behind the status bar. Falls back to the light/dark constants when it is missing or
+     * not a colour this can parse.
      */
-    private fun applyTheme(isDark: Boolean) {
-        val background = if (isDark) COLOR_DARK_BACKGROUND else COLOR_LIGHT_BACKGROUND
+    private fun applyTheme(isDark: Boolean, backgroundHex: String? = null) {
+        val fallback = if (isDark) COLOR_DARK_BACKGROUND else COLOR_LIGHT_BACKGROUND
+        val background = backgroundHex?.let { hex ->
+            runCatching { Color.parseColor(hex) }.getOrNull()
+        } ?: fallback
         binding.root.setBackgroundColor(background)
         window.setBackgroundDrawable(ColorDrawable(background))
         WindowInsetsControllerCompat(window, window.decorView).apply {
@@ -705,9 +713,10 @@ class MainActivity : AppCompatActivity() {
         const val UPDATE_WATCH_ATTEMPTS = 8
         const val UPDATE_WATCH_INTERVAL_MS = 2_000L
 
-        // Matches the SPA's own surfaces so the strip behind the system bars blends in.
-        // `theme_color` in frontend/public/manifest.webmanifest is #18181b.
-        val COLOR_DARK_BACKGROUND = Color.parseColor("#18181b")
+        // Last-resort fallbacks for when the SPA has not reported its palette yet (or sent
+        // one this cannot parse). These mirror the default palettes in
+        // frontend/src/lib/theme.ts; the reported `--color-background` normally wins.
+        val COLOR_DARK_BACKGROUND = Color.parseColor("#111111")
         val COLOR_LIGHT_BACKGROUND = Color.parseColor("#ffffff")
     }
 }
