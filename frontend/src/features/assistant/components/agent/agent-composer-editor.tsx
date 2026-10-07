@@ -59,6 +59,11 @@ export interface AgentComposerSuggestionState {
   onSelectedIndexChange: (index: number) => void;
 }
 
+export interface AgentComposerActions {
+  insertCandidate: (candidate: AgentComposerSuggestionItem) => void;
+  insertTrigger: (trigger: "/" | "@") => void;
+}
+
 interface AgentComposerEditorProps {
   projectId: string;
   value: string;
@@ -66,6 +71,7 @@ interface AgentComposerEditorProps {
   disabled: boolean;
   onOpenMentionChapter?: (chapterId: string, chapterTitle: string) => void;
   onMentionSuggestionsChange?: (state: AgentComposerSuggestionState | null) => void;
+  onComposerActionsChange?: (actions: AgentComposerActions | null) => void;
   onPasteFiles?: (dataTransfer: DataTransfer) => void;
   onDropFiles?: (dataTransfer: DataTransfer) => void;
   onChange: (value: string) => void;
@@ -190,6 +196,7 @@ export function AgentComposerEditor({
   disabled,
   onOpenMentionChapter,
   onMentionSuggestionsChange,
+  onComposerActionsChange,
   onPasteFiles,
   onDropFiles,
   onChange,
@@ -368,6 +375,28 @@ export function AgentComposerEditor({
     setSelectedIndex(0);
   }, []);
 
+  const insertCandidate = useCallback(
+    (candidate: AgentComposerSuggestionItem) => {
+      if (!editor) return;
+      const chain = editor.chain().focus();
+      if (candidate.kind === "skill") {
+        chain.insertAssistantCommand(createCommandNodeAttrs(candidate));
+      } else {
+        chain.insertAssistantMention(createMentionNodeAttrs(candidate));
+      }
+      chain.insertContent(" ").run();
+      closeSuggestions();
+    },
+    [closeSuggestions, editor],
+  );
+
+  const insertTrigger = useCallback(
+    (trigger: "/" | "@") => {
+      editor?.chain().focus().insertContent(trigger).run();
+    },
+    [editor],
+  );
+
   const handleSelectSuggestion = useCallback(
     (candidate: AgentComposerSuggestionItem, index: number) => {
       if (!editor || mentionQuery.replaceFrom < 0) return;
@@ -416,6 +445,9 @@ export function AgentComposerEditor({
       }
 
       if (event.key !== "Enter") return;
+      // IME composition guard: when a CJK input method is composing (pinyin
+      // candidates etc.), Enter confirms the composition and must not submit.
+      if (event.nativeEvent.isComposing || event.keyCode === 229) return;
       if (event.shiftKey) {
         if (!editor) return;
         event.preventDefault();
@@ -505,6 +537,16 @@ export function AgentComposerEditor({
     suggestionItems,
     suggestionStatus,
   ]);
+
+  useEffect(() => {
+    if (!onComposerActionsChange) return;
+    if (!editor) {
+      onComposerActionsChange(null);
+      return;
+    }
+    onComposerActionsChange({ insertCandidate, insertTrigger });
+    return () => onComposerActionsChange(null);
+  }, [editor, insertCandidate, insertTrigger, onComposerActionsChange]);
 
   useEffect(
     () => () => {

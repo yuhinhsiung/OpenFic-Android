@@ -20,8 +20,16 @@ from app.agent_runtime.context.processors.filter import filter_invalid
 from app.agent_runtime.context.types import ContextMessage
 
 
-def _is_llm_history_message(row: AgentRunMessage) -> bool:
-    return row.message_type == "message" and row.llm_visibility == "visible"
+def _is_llm_history_message(
+    row: AgentRunMessage, *, include_user_requests: bool = False
+) -> bool:
+    return (
+        (
+            row.message_type == "message"
+            or (include_user_requests and row.message_type == "user_request")
+        )
+        and row.llm_visibility == "visible"
+    )
 
 
 def _tool_calls(row: AgentRunMessage) -> list[dict] | None:
@@ -34,6 +42,10 @@ def _response_metadata(row: AgentRunMessage) -> dict:
     metadata: dict = {"openfic_seq": row.seq}
     if row.role == "tool" and row.tool_name:
         metadata["openfic_tool_name"] = row.tool_name
+    if row.role == "tool":
+        metadata["openfic_status"] = row.status
+    if _message_metadata(row).get("pruned") is True:
+        metadata["openfic_pruned"] = True
     return metadata
 
 
@@ -44,6 +56,14 @@ def _user_additional_kwargs(row: AgentRunMessage) -> dict:
         return {}
     attachments = metadata.get("attachments") if isinstance(metadata, dict) else None
     return {"openfic_attachments": attachments} if isinstance(attachments, list) else {}
+
+
+def _message_metadata(row: AgentRunMessage) -> dict:
+    try:
+        metadata = json.loads(row.message_metadata or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return metadata if isinstance(metadata, dict) else {}
 
 
 def _order_tool_results_by_call_order(
@@ -86,7 +106,13 @@ def _order_tool_results_by_call_order(
     return ordered
 
 
-async def load_history(db_session: AsyncSession, session_id: str) -> list[BaseMessage]:
+async def load_history(
+    db_session: AsyncSession,
+    session_id: str,
+    *,
+    include_user_requests: bool = False,
+    exclude_message_ids: set[str] | None = None,
+) -> list[BaseMessage]:
     """加载 session 历史，转成 LangChain BaseMessage 列表。
 
     规则：
@@ -110,7 +136,8 @@ async def load_history(db_session: AsyncSession, session_id: str) -> list[BaseMe
     rows = [
         r
         for r in rows
-        if _is_llm_history_message(r)
+        if _is_llm_history_message(r, include_user_requests=include_user_requests)
+        and (not exclude_message_ids or r.id not in exclude_message_ids)
         and not (r.role == "user" and r.status == "pending")
     ]
 
@@ -196,6 +223,9 @@ async def load_history(db_session: AsyncSession, session_id: str) -> list[BaseMe
             )
         elif part.role == "assistant":
             kwargs: dict = {}
+            responses_output = _message_metadata(row).get("responses_output")
+            if row.status == "complete" and isinstance(responses_output, list) and responses_output:
+                kwargs["responses_output"] = responses_output
             if idx == last_assistant_with_reasoning_idx and row.reasoning:
                 kwargs["reasoning_content"] = row.reasoning
             ai_msg = AIMessage(

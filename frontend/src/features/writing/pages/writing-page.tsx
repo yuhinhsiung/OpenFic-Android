@@ -527,6 +527,8 @@ export function WritingPage() {
                   <Tooltip content={t("writing.chapters")}>
                     <IconButton
                       variant="ghost"
+                      color="gray"
+                      highContrast
                       size="2"
                       aria-label={t("writing.chapters")}
                       onClick={() => setIsSidebarOpen((open) => !open)}
@@ -544,6 +546,8 @@ export function WritingPage() {
                     <Tooltip content={t("editor.addSelectedToConversation")}>
                       <IconButton
                         variant="ghost"
+                        color="gray"
+                        highContrast
                         size="2"
                         aria-label={t("editor.addSelectedToConversation")}
                         onClick={() => addSelectionToConversationRef.current?.()}
@@ -555,6 +559,8 @@ export function WritingPage() {
                   <Tooltip content={t("assistant.mobileTitle")}>
                     <IconButton
                       variant="ghost"
+                      color="gray"
+                      highContrast
                       size="2"
                       aria-label={t("assistant.mobileTitle")}
                       onClick={openAssistantSidebar}

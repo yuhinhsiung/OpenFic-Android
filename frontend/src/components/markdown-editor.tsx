@@ -2,7 +2,7 @@ import { Box, Flex, Text, Tooltip } from "@radix-ui/themes";
 import type { EditorView } from "@tiptap/pm/view";
 import { useEditor, EditorContent } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useTranslation } from "react-i18next";
 
@@ -19,6 +19,7 @@ export interface MarkdownEditorProps {
   onContentChange: (markdown: string) => void;
   onSave: () => void;
   isSaving?: boolean;
+  isSaveBlocked?: boolean;
   hasChanges?: boolean;
   isLocked?: boolean;
   onLockedAction?: () => void;
@@ -73,6 +74,7 @@ export function MarkdownEditor({
   onContentChange,
   onSave,
   isSaving = false,
+  isSaveBlocked = false,
   hasChanges = false,
   isLocked = false,
   onLockedAction,
@@ -90,7 +92,13 @@ export function MarkdownEditor({
   onScrollPositionChange,
 }: MarkdownEditorProps) {
   const { t } = useTranslation();
-  const contentSyncedRef = useRef(content);
+  // Multipart form submissions normalize line endings to CRLF.
+  const normalizedContent = useMemo(() => content.replace(/\r\n?/g, "\n"), [content]);
+  const contentSyncedRef = useRef(normalizedContent);
+  const initialContentRef = useRef(normalizedContent);
+  const onSaveRef = useRef(onSave);
+  const onLockedActionRef = useRef(onLockedAction);
+  const isLockedRef = useRef(isLocked);
   const editorContentRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const initialScrollTopRef = useRef(scrollTop);
@@ -98,6 +106,10 @@ export function MarkdownEditor({
   const scrollPositionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pendingExternalLink, setPendingExternalLink] = useState<string | null>(null);
   const [hoveredEditorLink, setHoveredEditorLink] = useState<HoveredEditorLink | null>(null);
+
+  onSaveRef.current = onSave;
+  onLockedActionRef.current = onLockedAction;
+  isLockedRef.current = isLocked;
 
   const handleEditorLinkClick = useCallback(
     (_view: EditorView, _pos: number, event: MouseEvent) => {
@@ -150,25 +162,33 @@ export function MarkdownEditor({
     window.open(pendingExternalLink, "_blank", "noopener,noreferrer");
   }, [pendingExternalLink]);
 
-  const editor = useEditor({
-    extensions: createMarkdownEditorExtensions({
-      placeholder: placeholder ?? "",
-      shortcuts: {
-        onSave: () => {
-          if (isLocked) {
-            onLockedAction?.();
-            return;
-          }
-          onSave();
+  const editorExtensions = useMemo(
+    () =>
+      createMarkdownEditorExtensions({
+        placeholder: placeholder ?? "",
+        shortcuts: {
+          onSave: () => {
+            if (isLockedRef.current) {
+              onLockedActionRef.current?.();
+              return;
+            }
+            onSaveRef.current();
+          },
         },
-      },
-    }),
-    content,
+      }),
+    [placeholder],
+  );
+  const editorProps = useMemo(
+    () => ({ handleClick: handleEditorLinkClick }),
+    [handleEditorLinkClick],
+  );
+
+  const editor = useEditor({
+    extensions: editorExtensions,
+    content: initialContentRef.current,
     contentType: "markdown",
     editable: !isLocked,
-    editorProps: {
-      handleClick: handleEditorLinkClick,
-    },
+    editorProps,
   });
   const editorRef = useRef(editor);
 
@@ -202,20 +222,14 @@ export function MarkdownEditor({
   useEffect(() => {
     const currentEditor = editorRef.current;
     if (!currentEditor) return;
-    if (content === contentSyncedRef.current) return;
+    if (normalizedContent === contentSyncedRef.current) return;
 
-    const { from, to } = currentEditor.state.selection;
-    const wasFocused = currentEditor.isFocused;
-    contentSyncedRef.current = content;
-    currentEditor.commands.setContent(content, { contentType: "markdown", emitUpdate: false });
-    if (!wasFocused) return;
-
-    const maxPosition = Math.max(1, currentEditor.state.doc.content.size);
-    currentEditor.commands.setTextSelection({
-      from: Math.min(from, maxPosition),
-      to: Math.min(to, maxPosition),
+    contentSyncedRef.current = normalizedContent;
+    currentEditor.commands.setContent(normalizedContent, {
+      contentType: "markdown",
+      emitUpdate: false,
     });
-  }, [content]);
+  }, [normalizedContent, editor]);
 
   const flushScrollPosition = useCallback(() => {
     if (scrollPositionTimerRef.current) {
@@ -287,10 +301,10 @@ export function MarkdownEditor({
   );
 
   const handleTitleBlur = useCallback(() => {
-    if (hasChanges && !isLocked) {
+    if (hasChanges && !isLocked && !isSaveBlocked) {
       onSave();
     }
-  }, [hasChanges, isLocked, onSave]);
+  }, [hasChanges, isLocked, isSaveBlocked, onSave]);
 
   const saveStatus = isSaving ? "saving" : hasChanges ? "unsaved" : "saved";
   const wordCount = externalWordCount ?? editor?.storage.characterCount?.characters() ?? 0;
@@ -377,7 +391,7 @@ export function MarkdownEditor({
         align="center"
         style={{
           borderTop: "1px solid var(--gray-a4)",
-          background: "var(--gray-a2)",
+          background: "var(--theme-editor-bar-background)",
         }}
       >
         <Text
