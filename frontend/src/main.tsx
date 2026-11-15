@@ -534,8 +534,8 @@ function Root() {
                 />
               </ErrorBoundary>
             )}
+            <Toaster appearance={appearance} />
           </Theme>
-          {isReady && !requiresAuthentication ? <Toaster appearance={appearance} /> : null}
         </>
       </QueryClientProvider>
     </StrictMode>

@@ -3,6 +3,7 @@ import type { DesktopConfig, DesktopInstance, DesktopInstanceAppearance } from "
 export const IpcChannels = {
   getConfig: "config:get",
   saveConfig: "config:save",
+  saveInstanceAccessKey: "instance:save-access-key",
   saveInstanceAppearance: "instance:save-appearance",
   initializeApp: "app:initialize",
   cancelStartup: "app:cancel-startup",
@@ -39,6 +40,7 @@ export const IpcChannels = {
   reportBug: "help:report-bug",
   suggestFeature: "help:suggest-feature",
   openOpenAICodexAuthorization: "auth:open-openai-codex-authorization",
+  openExternalLink: "link:open-external",
   getZoomFactor: "zoom:get-factor",
   saveZoomFactor: "zoom:save-factor",
   zoomFactorChanged: "zoom:changed",
@@ -54,12 +56,7 @@ export const IpcChannels = {
   selectOpenFile: "dialog:select-open-file",
 } as const;
 
-export type SetupStep =
-  | "download-python"
-  | "extract-python"
-  | "create-venv"
-  | "install-uv"
-  | "install-openfic";
+export type SetupStep = "download-python" | "extract-python" | "create-venv" | "install-uv" | "install-openfic";
 
 export interface SetupProgressEvent {
   step: SetupStep;
@@ -75,6 +72,11 @@ export interface SaveConfigRequest {
 
 export interface SaveInstanceAppearanceRequest extends DesktopInstanceAppearance {
   instanceId: string;
+}
+
+export interface SaveInstanceAccessKeyRequest {
+  instanceId: string;
+  accessKey: string;
 }
 
 export interface SaveZoomFactorRequest {
@@ -180,14 +182,7 @@ export interface StartupProgressEvent {
   /** Whether the current operation has no reliable percentage. */
   indeterminate?: boolean;
   /** Backend maintenance phase used to localize the current detail. */
-  maintenancePhase?:
-    | "pending"
-    | "pruning"
-    | "migrating"
-    | "vacuuming"
-    | "cleanup"
-    | "ready"
-    | "failed";
+  maintenancePhase?: "pending" | "pruning" | "migrating" | "vacuuming" | "cleanup" | "ready" | "failed";
   /** Backend maintenance internal progress (0..1), shown as text detail. */
   maintenanceProgress?: number | null;
   /** Backend maintenance reclaimed bytes (current), shown as text detail. */

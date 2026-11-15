@@ -7,9 +7,14 @@ export function registerSW(): void {
   }
 
   // Packaged shells serve the bundle from the app itself (Electron's `app://`, Android's
-  // WebViewAssetLoader), where a service worker adds nothing and its cache would outlive
-  // an app update.
-  if (typeof window !== "undefined" && ("openficDesktopHost" in window || "openficAndroidHost" in window)) {
+  // WebViewAssetLoader, the mobile shell), where a service worker adds nothing and its
+  // cache would outlive an app update.
+  if (
+    typeof window !== "undefined" &&
+    ("openficDesktopHost" in window ||
+      "openficAndroidHost" in window ||
+      "openficMobileHost" in window)
+  ) {
     return;
   }
 

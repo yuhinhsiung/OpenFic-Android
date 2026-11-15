@@ -31,6 +31,8 @@ from app.agent_runtime.tools.errors import (
 )
 from app.agent_runtime.tool_call_recovery import (
     is_malformed_tool_call,
+    is_output_truncated,
+    malformed_tool_call_failure,
     reconcile_tool_call_chunks,
     recover_message_tool_calls,
 )
@@ -65,6 +67,7 @@ class _AssistantBuffer:
     reasoning_started_at: datetime | None = None
     reasoning_last_updated_at: datetime | None = None
     tool_call_chunks: dict[int, dict] = field(default_factory=dict)
+    tool_call_extra_content: dict[str, dict] = field(default_factory=dict)
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -181,6 +184,22 @@ class MessagePersister:
             if args_part:
                 slot["args_text"] += args_part
 
+        # Streamed chunks stash per-tool-call `extra_content` (e.g. Gemini
+        # thought signatures) in additional_kwargs; keep it so the signature
+        # survives even if the aggregated end output drops it.
+        chunk_kwargs = getattr(chunk, "additional_kwargs", None)
+        if isinstance(chunk_kwargs, dict):
+            streamed_extra = chunk_kwargs.get("tool_call_extra_content")
+            if isinstance(streamed_extra, dict):
+                for tool_call_id, extra_content in streamed_extra.items():
+                    if (
+                        isinstance(tool_call_id, str)
+                        and tool_call_id
+                        and isinstance(extra_content, dict)
+                        and extra_content
+                    ):
+                        buf.tool_call_extra_content[tool_call_id] = extra_content
+
     async def _on_chat_model_end(self, event: dict) -> None:
         run_id = event.get("run_id") or "default"
         buf = self._assistant_buffers.pop(run_id, None)
@@ -199,12 +218,27 @@ class MessagePersister:
             if isinstance(responses_output, list) and responses_output
             else {}
         )
+        extra_content = (
+            additional_kwargs.get("tool_call_extra_content")
+            if isinstance(additional_kwargs, dict)
+            else None
+        )
+        if not isinstance(extra_content, dict) or not extra_content:
+            extra_content = buf.tool_call_extra_content or None
+        elif buf.tool_call_extra_content:
+            extra_content = {**buf.tool_call_extra_content, **extra_content}
+        if isinstance(extra_content, dict) and extra_content:
+            metadata["tool_call_extra_content"] = extra_content
         content = "".join(buf.content_parts) or self._extract_output_content(output)
         reasoning = "".join(buf.reasoning_parts) or self._extract_output_reasoning(
             output
         )
         reasoning_duration_ms = self._get_reasoning_duration_ms(buf)
-        tool_calls = self._reconcile_tool_calls(buf.tool_call_chunks, run_id=run_id)
+        tool_calls = self._reconcile_tool_calls(
+            buf.tool_call_chunks,
+            run_id=run_id,
+            truncated=is_output_truncated(output),
+        )
         if not tool_calls:
             tool_calls = self._extract_output_tool_calls(output, run_id=run_id)
 
@@ -225,13 +259,7 @@ class MessagePersister:
         for tool_call in tool_calls:
             if not is_malformed_tool_call(tool_call):
                 continue
-            content = serialize_tool_failure(
-                ToolFailure(
-                    code="malformed_tool_call",
-                    message="工具参数 JSON 无法解析，未执行工具调用",
-                    trace={"source": "tool_call_recovery"},
-                )
-            )
+            content = serialize_tool_failure(malformed_tool_call_failure(tool_call))
             await self._write(
                 role="tool",
                 status="complete",
@@ -358,8 +386,9 @@ class MessagePersister:
         chunks: dict[int, dict],
         *,
         run_id: str | None = None,
+        truncated: bool = False,
     ) -> list[dict]:
-        return reconcile_tool_call_chunks(chunks, id_seed=run_id)
+        return reconcile_tool_call_chunks(chunks, id_seed=run_id, truncated=truncated)
 
     @staticmethod
     def _extract_output_content(output: object | None) -> str:

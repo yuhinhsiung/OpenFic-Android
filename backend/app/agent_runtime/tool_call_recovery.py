@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from hashlib import sha1
 from typing import Any, cast
@@ -12,6 +13,149 @@ MALFORMED_TOOL_CALL_MARKER = "__malformed_tool_call__"
 MALFORMED_TOOL_CALL_RAW_ARGS = "__raw_args__"
 MALFORMED_TOOL_CALL_ERROR = "__parse_error__"
 MALFORMED_TOOL_CALL_MESSAGE = "工具参数 JSON 无法解析，未执行工具调用"
+TRUNCATED_TOOL_CALL_MESSAGE = (
+    "模型输出达到最大输出长度（max_tokens）被截断，本轮工具参数可能不完整，"
+    "已全部取消执行。请将内容拆分为多次较短的工具调用；"
+    "如需单次写入更长内容，请在模型设置中调大 Max Tokens"
+)
+
+# Anthropic: stop_reason=max_tokens; OpenAI-compatible: finish_reason=length; Gemini: MAX_TOKENS
+_TRUNCATION_STOP_REASONS = ("max_tokens", "length", "MAX_TOKENS")
+
+
+def _resolve_schema_ref(
+    schema: Mapping[str, Any],
+    root_schema: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    ref = schema.get("$ref")
+    if not isinstance(ref, str) or not ref.startswith("#/"):
+        return schema
+
+    current: Any = root_schema
+    for part in ref[2:].split("/"):
+        part = part.replace("~1", "/").replace("~0", "~")
+        if not isinstance(current, Mapping) or part not in current:
+            return schema
+        current = current[part]
+    return current if isinstance(current, Mapping) else schema
+
+
+def _schema_variants(
+    schema: Mapping[str, Any],
+    root_schema: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    resolved = _resolve_schema_ref(schema, root_schema)
+    for union_key in ("anyOf", "oneOf"):
+        branches = resolved.get(union_key)
+        if isinstance(branches, list):
+            variants: list[Mapping[str, Any]] = []
+            for branch in branches:
+                if isinstance(branch, Mapping):
+                    variants.extend(_schema_variants(branch, root_schema))
+            return variants
+    return [resolved]
+
+
+def _parse_json_container(value: str) -> Any:
+    try:
+        parsed = repair_json_loads(value)
+    except Exception:
+        return value
+    return parsed if isinstance(parsed, (Mapping, list)) else value
+
+
+def _normalize_schema_value(
+    value: Any,
+    schema: Mapping[str, Any] | None,
+    root_schema: Mapping[str, Any],
+) -> Any:
+    if not isinstance(schema, Mapping):
+        return value
+
+    variants = _schema_variants(schema, root_schema)
+    accepts_object = any(item.get("type") == "object" for item in variants)
+    accepts_array = any(item.get("type") == "array" for item in variants)
+    if isinstance(value, str) and (accepts_object or accepts_array):
+        value = _parse_json_container(value)
+
+    object_variants = [item for item in variants if item.get("type") == "object"]
+    if isinstance(value, Mapping) and object_variants:
+        properties: dict[str, Mapping[str, Any]] = {}
+        additional_schema: Mapping[str, Any] | None = None
+        for variant in object_variants:
+            raw_properties = variant.get("properties")
+            if isinstance(raw_properties, Mapping):
+                properties.update(
+                    {
+                        str(key): child
+                        for key, child in raw_properties.items()
+                        if isinstance(child, Mapping)
+                    }
+                )
+            raw_additional = variant.get("additionalProperties")
+            if isinstance(raw_additional, Mapping):
+                additional_schema = raw_additional
+
+        normalized: dict[str, Any] = {}
+        for key, item in value.items():
+            child_schema = properties.get(str(key), additional_schema)
+            normalized[key] = _normalize_schema_value(
+                item,
+                child_schema,
+                root_schema,
+            )
+        return normalized
+
+    if isinstance(value, list):
+        item_schemas = [
+            item_schema
+            for variant in variants
+            if variant.get("type") == "array"
+            for item_schema in [variant.get("items")]
+            if isinstance(item_schema, Mapping)
+        ]
+        if item_schemas:
+            item_schema: Mapping[str, Any]
+            if len(item_schemas) == 1:
+                item_schema = item_schemas[0]
+            else:
+                item_schema = {"anyOf": item_schemas}
+            return [
+                _normalize_schema_value(item, item_schema, root_schema)
+                for item in value
+            ]
+
+    return value
+
+
+def normalize_tool_input_for_schema(
+    tool_input: Any,
+    args_schema: Any,
+) -> Any:
+    """Parse JSON-encoded nested containers only where the schema expects them.
+
+    Some model providers encode an object or array-valued tool argument as a
+    JSON string. Normalize those values before Pydantic validates the tool
+    input, while leaving ordinary string fields such as note content intact.
+    """
+    if not isinstance(tool_input, Mapping):
+        return tool_input
+
+    schema_builder = getattr(args_schema, "model_json_schema", None)
+    if not callable(schema_builder):
+        schema_builder = getattr(args_schema, "schema", None)
+    if not callable(schema_builder):
+        return dict(tool_input)
+
+    try:
+        schema = schema_builder()
+    except Exception:
+        return dict(tool_input)
+    if not isinstance(schema, Mapping):
+        return dict(tool_input)
+
+    normalized = _normalize_schema_value(dict(tool_input), schema, schema)
+    return normalized if isinstance(normalized, dict) else dict(tool_input)
 
 
 def parse_tool_args(args_raw: Any) -> dict[str, Any] | None:
@@ -41,11 +185,29 @@ def synthesize_tool_call_id(
     return f"call_{sha1(seed.encode('utf-8')).hexdigest()[:16]}"
 
 
-def _malformed_args_payload(raw_args: Any) -> dict[str, Any]:
+def is_output_truncated(message: object | None) -> bool:
+    """Whether the model stopped because it hit its output token limit."""
+    metadata = getattr(message, "response_metadata", None)
+    if not isinstance(metadata, Mapping):
+        return False
+    return any(
+        metadata.get(key) in _TRUNCATION_STOP_REASONS
+        for key in ("stop_reason", "finish_reason")
+    )
+
+
+def _malformed_args_payload(raw_args: Any, *, truncated: bool = False) -> dict[str, Any]:
+    if isinstance(raw_args, Mapping) and raw_args.get(MALFORMED_TOOL_CALL_MARKER):
+        return dict(raw_args)
+
     payload: dict[str, Any] = {
         MALFORMED_TOOL_CALL_MARKER: True,
-        MALFORMED_TOOL_CALL_ERROR: MALFORMED_TOOL_CALL_MESSAGE,
+        MALFORMED_TOOL_CALL_ERROR: (
+            TRUNCATED_TOOL_CALL_MESSAGE if truncated else MALFORMED_TOOL_CALL_MESSAGE
+        ),
     }
+    if isinstance(raw_args, Mapping):
+        raw_args = json.dumps(dict(raw_args), ensure_ascii=False, default=str)
     if isinstance(raw_args, str):
         payload[MALFORMED_TOOL_CALL_RAW_ARGS] = raw_args
     return payload
@@ -57,6 +219,7 @@ def _recover_one_tool_call(
     index: int,
     id_seed: str | None = None,
     args_value: Any | None = None,
+    truncated: bool = False,
 ) -> dict[str, Any] | None:
     name = raw_tool_call.get("name")
     if not isinstance(name, str) or not name:
@@ -71,9 +234,12 @@ def _recover_one_tool_call(
         )
 
     raw_args = raw_tool_call.get("args") if args_value is None else args_value
-    args = parse_tool_args(raw_args)
+    # Truncated args are untrustworthy even when json_repair can close them: a missing
+    # field surfaces as a misleading validation error, and a cut-off string would be
+    # written as if it were complete content.
+    args = None if truncated else parse_tool_args(raw_args)
     if args is None:
-        args = _malformed_args_payload(raw_args)
+        args = _malformed_args_payload(raw_args, truncated=truncated)
 
     return {"id": tool_call_id, "name": name, "args": args}
 
@@ -82,6 +248,7 @@ def recover_tool_calls(
     raw_tool_calls: Any,
     *,
     id_seed: str | None = None,
+    truncated: bool = False,
 ) -> list[dict[str, Any]]:
     if not isinstance(raw_tool_calls, list):
         return []
@@ -94,6 +261,7 @@ def recover_tool_calls(
             cast(Mapping[str, Any], raw_tool_call),
             index=index,
             id_seed=id_seed,
+            truncated=truncated,
         )
         if recovered_tool_call is not None:
             recovered.append(recovered_tool_call)
@@ -105,13 +273,16 @@ def recover_message_tool_calls(
     *,
     id_seed: str | None = None,
 ) -> list[dict[str, Any]]:
+    truncated = is_output_truncated(message)
     tool_calls = recover_tool_calls(
         getattr(message, "tool_calls", None),
         id_seed=id_seed,
+        truncated=truncated,
     )
     invalid_tool_calls = recover_tool_calls(
         getattr(message, "invalid_tool_calls", None),
         id_seed=id_seed,
+        truncated=truncated,
     )
 
     if not invalid_tool_calls:
@@ -133,10 +304,44 @@ def recover_message_tool_calls(
     return merged
 
 
+def merge_tool_call_chunks(
+    chunks: dict[int, dict[str, Any]],
+    raw_chunks: Any,
+) -> None:
+    """Merge streamed tool-call fragments without concatenating identifiers.
+
+    Tool-call arguments are streamed as fragments and must be appended. The
+    name and id identify the call, so providers that repeat them in each
+    snapshot must be handled with last-value-wins semantics.
+    """
+    if not isinstance(raw_chunks, list):
+        return
+
+    for raw_chunk in raw_chunks:
+        if not isinstance(raw_chunk, Mapping):
+            continue
+        index = raw_chunk.get("index")
+        if not isinstance(index, int):
+            continue
+
+        current = chunks.setdefault(
+            index,
+            {"id": None, "name": None, "args_text": ""},
+        )
+        if raw_chunk.get("id"):
+            current["id"] = raw_chunk["id"]
+        if raw_chunk.get("name"):
+            current["name"] = raw_chunk["name"]
+        args = raw_chunk.get("args")
+        if isinstance(args, str) and args:
+            current["args_text"] += args
+
+
 def reconcile_tool_call_chunks(
     chunks: Mapping[int, Mapping[str, Any]],
     *,
     id_seed: str | None = None,
+    truncated: bool = False,
 ) -> list[dict[str, Any]]:
     recovered: list[dict[str, Any]] = []
     for index in sorted(chunks):
@@ -148,6 +353,7 @@ def reconcile_tool_call_chunks(
             index=index,
             id_seed=id_seed,
             args_value=chunk.get("args_text"),
+            truncated=truncated,
         )
         if recovered_tool_call is not None:
             recovered.append(recovered_tool_call)
@@ -169,9 +375,11 @@ def tool_call_input(tool_call: Mapping[str, Any]) -> Any:
     return dict(args)
 
 
-def build_malformed_tool_call_error(tool_call: Mapping[str, Any]) -> dict[str, Any]:
+def malformed_tool_call_failure(tool_call: Mapping[str, Any]) -> ToolFailure:
+    args = tool_call.get("args")
+    message = args.get(MALFORMED_TOOL_CALL_ERROR) if isinstance(args, Mapping) else None
     return ToolFailure(
         code="malformed_tool_call",
-        message=MALFORMED_TOOL_CALL_MESSAGE,
+        message=message if isinstance(message, str) else MALFORMED_TOOL_CALL_MESSAGE,
         trace={"source": "tool_call_recovery"},
-    ).to_result()
+    )

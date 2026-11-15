@@ -1,8 +1,9 @@
-import { Box, Flex, Text, Tooltip } from "@radix-ui/themes";
+import { Box, Flex, Text } from "@radix-ui/themes";
 import { AlertTriangle, CircleAlert } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 
+import { InfoTooltip } from "@/components";
 import {
   formatChapterDisplayName,
   getChapterDiffBodySection,
@@ -28,6 +29,7 @@ import { UnregisteredToolMessage } from "../../tools/shared/tool-message-status"
 import {
   getChapterPayload,
   getNotePayload,
+  getSkillDiffCards,
   getToolErrorMessage,
   getWorldEntryPayload,
   resolveToolMessageVisibilityState,
@@ -43,14 +45,16 @@ interface ToolErrorIndicatorProps {
 
 export function ToolErrorIndicator({ errorMessage }: ToolErrorIndicatorProps) {
   return (
-    <Tooltip content={<Box className="agent-tool-error-tooltip">{errorMessage}</Box>}>
+    <InfoTooltip content={<Box className="agent-tool-error-tooltip">{errorMessage}</Box>}>
       <Box
         className="agent-tool-error-indicator"
+        role="img"
         aria-label={errorMessage}
+        tabIndex={0}
       >
         <CircleAlert size={14} />
       </Box>
-    </Tooltip>
+    </InfoTooltip>
   );
 }
 
@@ -189,7 +193,10 @@ export function ToolMessage({ message }: ToolMessageProps) {
   const worldEntryDiffPreview = isWorldEntryDiffTool(message)
     ? getWorldEntryDiffPreview(message)
     : null;
-  const usesDiffHeader = Boolean(chapterDiffPreview || noteDiffPreview || worldEntryDiffPreview);
+  const skillDiffCards = descriptor?.group === "skill" ? getSkillDiffCards(message) : null;
+  const usesDiffHeader = Boolean(
+    chapterDiffPreview || noteDiffPreview || worldEntryDiffPreview || skillDiffCards,
+  );
   const contentMode = usesDiffHeader ? "expandable" : (descriptor?.contentMode ?? "static");
   const defaultExpanded = descriptor?.defaultExpanded?.(message) ?? false;
   const [isExpanded, setIsExpanded] = useState(() => defaultExpanded);
@@ -217,7 +224,15 @@ export function ToolMessage({ message }: ToolMessageProps) {
     worldEntryDiffPreview?.sections.find((s) => s.type === "content") ?? null;
   const diffBodySection =
     chapterDiffBodySection ?? noteDiffBodySection ?? worldEntryDiffBodySection;
-  const diffChangeSummary = summarizeChapterDiffSection(diffBodySection);
+  const diffChangeSummary = skillDiffCards
+    ? skillDiffCards.reduce(
+        (summary, card) => {
+          const counts = summarizeChapterDiffSection(card.section);
+          return { added: summary.added + counts.added, removed: summary.removed + counts.removed };
+        },
+        { added: 0, removed: 0 },
+      )
+    : summarizeChapterDiffSection(diffBodySection);
   const chapter = getChapterPayload(message);
   const note = isNoteDiffTool(message) ? getNotePayload(message) : null;
   const worldEntry = isWorldEntryDiffTool(message) ? getWorldEntryPayload(message) : null;
@@ -232,7 +247,9 @@ export function ToolMessage({ message }: ToolMessageProps) {
       ? (noteDiffPreview.note_title ?? note?.title)
       : worldEntryDiffPreview
         ? (worldEntryDiffPreview.entry_title ?? worldEntry?.title)
-        : undefined;
+        : skillDiffCards
+          ? detail
+          : undefined;
   const visibilityState = resolveToolMessageVisibilityState({
     message,
     contentMode,

@@ -16,6 +16,7 @@ from app.agent_runtime.persistence import repo
 from app.agent_runtime.persistence import persister as persister_module
 from app.agent_runtime.persistence.persister import MessagePersister
 from app.agent_runtime.persistence.loader import load_history
+from app.agent_runtime.tool_call_recovery import TRUNCATED_TOOL_CALL_MESSAGE
 from app.models.clients.openai_codex import OpenAICodexChatModel
 
 
@@ -933,6 +934,73 @@ async def test_persister_persists_unrecoverable_invalid_tool_call_with_synthesiz
 
 
 @pytest.mark.asyncio
+async def test_persister_persists_truncated_tool_call_as_failure(
+    db_session: AsyncSession, db_session_factory, sample_task
+):
+    sid = "child-session-truncated-tool-call"
+    run_id = "child-run-truncated-tool-call"
+    p = MessagePersister(
+        session_id=sid,
+        task_id=sample_task.id,
+        project_id=sample_task.project_id,
+        db_session_factory=db_session_factory,
+        allow_subagent_child_events=True,
+    )
+
+    await p.handle({
+        "event": "on_chain_start",
+        "name": "composer",
+        "tags": ["agent_node", "subagent_child"],
+        "data": {},
+    })
+    await p.handle({
+        "event": "on_chat_model_start",
+        "run_id": run_id,
+        "tags": ["subagent_child"],
+        "data": {},
+    })
+    await p.handle({
+        "event": "on_chat_model_stream",
+        "run_id": run_id,
+        "tags": ["subagent_child"],
+        "data": {
+            "chunk": AIMessageChunk(
+                content="",
+                tool_call_chunks=[
+                    {
+                        "index": 0,
+                        "id": "call_1",
+                        "name": "edit_note",
+                        "args": '{"old_content": "x", "new_content": "第一段',
+                    }
+                ],
+            )
+        },
+    })
+    await p.handle({
+        "event": "on_chat_model_end",
+        "run_id": run_id,
+        "tags": ["subagent_child"],
+        "data": {
+            "output": AIMessage(
+                content="",
+                response_metadata={"stop_reason": "max_tokens"},
+            )
+        },
+    })
+
+    items = await repo.list_by_session(db_session, sid)
+    assert [item.role for item in items] == ["assistant", "tool"]
+    assert items[1].tool_call_id == "call_1"
+    assert json.loads(items[1].content) == {
+        "type": "fail",
+        "success": False,
+        "code": "malformed_tool_call",
+        "message": TRUNCATED_TOOL_CALL_MESSAGE,
+    }
+
+
+@pytest.mark.asyncio
 async def test_persister_mark_user_sent(
     db_session: AsyncSession, db_session_factory, sample_task
 ):
@@ -999,3 +1067,94 @@ async def test_persister_persists_node_events_as_hidden_system_messages(
     }
     assert items[1].metadata["event_type"] == "node_end"
     assert items[1].metadata["node_status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_persister_persists_tool_call_extra_content_and_loader_restores_it(
+    db_session: AsyncSession, db_session_factory, sample_task,
+):
+    sid = "session_tool_call_extra_content"
+    extra = {"function-call-1": {"google": {"thought_signature": "sig-abc-123"}}}
+    persister = MessagePersister(
+        session_id=sid, task_id=sample_task.id, project_id=sample_task.project_id,
+        db_session_factory=db_session_factory,
+    )
+    await persister.handle({"event": "on_chat_model_start", "run_id": "first", "data": {}})
+    await persister.handle({
+        "event": "on_chat_model_end", "run_id": "first", "data": {"output": AIMessage(
+            content="",
+            additional_kwargs={"tool_call_extra_content": extra},
+            tool_calls=[{
+                "name": "get_weather", "args": {"city": "Paris"},
+                "id": "function-call-1", "type": "tool_call",
+            }],
+        )},
+    })
+    await persister.handle({
+        "event": "on_tool_end", "name": "get_weather",
+        "metadata": {"tool_call_id": "function-call-1"},
+        "data": {"output": "sunny"},
+    })
+    async with db_session_factory() as restored_session:
+        rows = await repo.list_by_session(restored_session, sid)
+        assert rows[0].metadata["tool_call_extra_content"] == extra
+        history = await load_history(restored_session, sid)
+    assert history[0].additional_kwargs["tool_call_extra_content"] == extra
+
+    from app.models.clients.model_factory import ModelConfig, create_chat_model
+
+    model = create_chat_model(
+        ModelConfig(
+            provider_type="openai-compatible",
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            api_key="test-key",
+            model_id="gemini-3.5-flash",
+        )
+    )
+    payload = model._get_request_payload(history)
+    assert payload["messages"][0]["tool_calls"][0]["extra_content"] == {
+        "google": {"thought_signature": "sig-abc-123"}
+    }
+
+
+@pytest.mark.asyncio
+async def test_persister_recovers_tool_call_extra_content_from_stream_chunks(
+    db_session: AsyncSession, db_session_factory, sample_task,
+):
+    sid = "session_tool_call_extra_content_stream"
+    extra = {"function-call-1": {"google": {"thought_signature": "sig-stream-1"}}}
+    persister = MessagePersister(
+        session_id=sid, task_id=sample_task.id, project_id=sample_task.project_id,
+        db_session_factory=db_session_factory,
+    )
+    await persister.handle({"event": "on_chat_model_start", "run_id": "first", "data": {}})
+    await persister.handle({
+        "event": "on_chat_model_stream", "run_id": "first", "data": {"chunk": AIMessageChunk(
+            content="",
+            tool_call_chunks=[{
+                "index": 0, "id": "function-call-1",
+                "name": "get_weather", "args": "",
+            }],
+            additional_kwargs={"tool_call_extra_content": extra},
+        )},
+    })
+    # The aggregated end output carries no additional_kwargs here; the streamed
+    # chunks are the only source of the signature.
+    await persister.handle({
+        "event": "on_chat_model_end", "run_id": "first", "data": {"output": AIMessage(
+            content="",
+            tool_calls=[{
+                "name": "get_weather", "args": {"city": "Paris"},
+                "id": "function-call-1", "type": "tool_call",
+            }],
+        )},
+    })
+    await persister.handle({
+        "event": "on_tool_end", "name": "get_weather",
+        "metadata": {"tool_call_id": "function-call-1"},
+        "data": {"output": "sunny"},
+    })
+    rows = await repo.list_by_session(db_session, sid)
+    assert rows[0].metadata["tool_call_extra_content"] == extra
+    history = await load_history(db_session, sid)
+    assert history[0].additional_kwargs["tool_call_extra_content"] == extra

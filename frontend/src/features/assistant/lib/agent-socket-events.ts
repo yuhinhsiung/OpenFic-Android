@@ -1,3 +1,5 @@
+import { v4 as uuidv4 } from "uuid";
+
 import i18n from "@/i18n";
 import type { AgentEvent } from "@/lib/agent.types";
 
@@ -19,6 +21,7 @@ export const AGENT_SOCKET_EVENTS = [
   "agent:task_title_updated",
   "agent:chapter_refresh",
   "agent:note_refresh",
+  "agent:skill_refresh",
   "agent:world_entry_refresh",
   "agent:character_refresh",
   "agent:attachment_status",
@@ -87,7 +90,12 @@ export function toAgentEvent(
       status: data.status === "running" ? "running" : "completed",
       display: data.display === "hidden" ? "hidden" : "list",
       content,
-      payload: isRecord(data.payload) ? data.payload : {},
+      payload: {
+        ...(isRecord(data.payload) ? data.payload : {}),
+        ...(getString(data.requestId) || getString(data.request_id)
+          ? { requestId: getString(data.requestId) || getString(data.request_id) }
+          : {}),
+      },
     } as AgentEvent;
   }
 
@@ -207,7 +215,10 @@ export function toAgentEvent(
       status,
       display: "hidden",
       agent: node,
+      revision_id: getString(data.revision_id),
       payload: {
+        revision_id: getString(data.revision_id),
+        requestId: getString(data.requestId) || getString(data.request_id),
         node,
         phase,
         status,
@@ -323,6 +334,20 @@ export function toAgentEvent(
         project_id: getString(data.project_id),
         note_id: getString(data.note_id),
         operation: getString(data.operation),
+      },
+    };
+  }
+
+  if (eventName === "agent:skill_refresh") {
+    return {
+      type: "skill_refresh",
+      role: "system",
+      status: "completed",
+      display: "hidden",
+      created_at: getString(data.created_at),
+      payload: {
+        session_id: getString(data.session_id),
+        skill_id: getString(data.skill_id),
       },
     };
   }
@@ -510,12 +535,15 @@ export function toAgentEvent(
       getString(data.message) ||
       i18n.t("assistant.agentRunFailed");
     return {
+      id: getString(data.round_id)
+        ? `run-error:${getString(data.round_id)}`
+        : `run-error:unscoped:${uuidv4()}`,
       type: "error",
       role: "system",
       status: "error",
       display: "list",
       content,
-      payload: data,
+      payload: { ...data, run_error: true },
     };
   }
 

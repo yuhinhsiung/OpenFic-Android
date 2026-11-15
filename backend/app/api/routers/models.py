@@ -10,6 +10,8 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas.model import (
+    EmbeddingDimensionsRequest,
+    EmbeddingDimensionsResponse,
     ModelCreateRequest,
     ModelResponse,
     ModelUpdateRequest,
@@ -17,6 +19,7 @@ from app.api.schemas.model import (
     TaskType,
 )
 from app.api.agent_settings_lock import require_agent_settings_unlocked
+from app.api.validation_errors import format_validation_error
 from app.core.errors import NotFoundError
 from app.storage.database import get_session
 from app.models.services import ModelService
@@ -102,6 +105,32 @@ async def get_models(
 
 
 @router.post(
+    "/embedding-dimensions",
+    response_model=EmbeddingDimensionsResponse,
+    summary="自动获取嵌入模型维度",
+)
+async def detect_embedding_dimensions(
+    request: EmbeddingDimensionsRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> EmbeddingDimensionsResponse:
+    from app.models.services.embedding_service import probe_provider_embedding_dimensions
+
+    await require_agent_settings_unlocked(session)
+    try:
+        dimensions = await probe_provider_embedding_dimensions(
+            session, request.provider_id, request.model_id
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"自动获取维度失败: {format_validation_error(exc)}",
+        ) from exc
+    return EmbeddingDimensionsResponse(dimensions=dimensions)
+
+
+@router.post(
     "/{model_id}/validate",
     response_model=ModelValidationResponse,
     summary="验证模型连接",
@@ -118,9 +147,11 @@ async def validate_model_connection(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
         ) from exc
-    except Exception:
+    except Exception as exc:
         logger.opt(exception=True).warning("验证模型连接失败: model_id={}", model_id)
-        return ModelValidationResponse(success=False, message="模型连接验证失败")
+        return ModelValidationResponse(
+            success=False, message=f"模型连接验证失败: {format_validation_error(exc)}"
+        )
 
     return ModelValidationResponse(success=True, message="模型连接验证成功")
 
@@ -248,6 +279,8 @@ async def update_model(
             remark=request.remark,
             provider_id=request.provider_id,
             model_identifier=request.model_id,
+            clear_dimensions="dimensions" in request.model_fields_set and request.dimensions is None,
+            clear_max_tokens="max_tokens" in request.model_fields_set and request.max_tokens is None,
             task_type=request.task_type,
             temperature=request.temperature,
             top_p=request.top_p,

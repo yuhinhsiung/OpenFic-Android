@@ -5,16 +5,65 @@
  * 提供一致的样式和用户体验。
  */
 
-import { Box, Button, Flex, Popover, ScrollArea, Select, Text, TextField } from "@radix-ui/themes";
+import {
+  Box,
+  Button,
+  ChevronDownIcon,
+  Flex,
+  Popover,
+  ScrollArea,
+  Select,
+  Text,
+  TextField,
+} from "@radix-ui/themes";
 import clsx from "clsx";
-import { ChevronDown, Search } from "lucide-react";
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, Search } from "lucide-react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FocusEventHandler, ReactNode, ComponentProps } from "react";
 import { useTranslation } from "react-i18next";
+
+import { useAppShell } from "@/features/app-shell/components/app-shell-context";
+
+import { MobileSelectSheet } from "./mobile-select-sheet";
 
 import "./select.css";
 
 type TextColor = ComponentProps<typeof Text>["color"];
+
+function preventFocusRestore(event: Event, actionClosed: boolean) {
+  const focused = document.activeElement;
+  if (
+    actionClosed ||
+    (focused instanceof HTMLElement &&
+      focused !== document.body &&
+      event.target instanceof HTMLElement &&
+      !event.target.contains(focused))
+  )
+    event.preventDefault();
+}
+
+function useExclusiveSelect(onDismiss?: () => void) {
+  const [open, setOpen] = useState(false);
+  const instanceId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    document.dispatchEvent(new CustomEvent("context-menu:opened", { detail: { id: instanceId } }));
+  }, [open, instanceId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOpened = (event: Event) => {
+      if ((event as CustomEvent<{ id: string }>).detail.id === instanceId) return;
+      setOpen(false);
+      onDismiss?.();
+    };
+    document.addEventListener("context-menu:opened", handleOpened);
+    return () => document.removeEventListener("context-menu:opened", handleOpened);
+  }, [instanceId, onDismiss, open]);
+
+  return [open, setOpen] as const;
+}
 
 export interface SelectOption {
   value: string;
@@ -63,7 +112,9 @@ function SelectOptionWithActions({
           event.preventDefault();
           event.stopPropagation();
           row
-            .querySelector<HTMLElement>('[role="option"], [data-slot="searchable-select-item"]')
+            .querySelector<HTMLElement>(
+              '[role="option"], [data-slot="searchable-select-item"], [data-slot="mobile-select-item"]',
+            )
             ?.focus();
         }
       }}
@@ -162,6 +213,62 @@ function SelectOptionContent({ option, size }: { option: SelectOption; size: "1"
   );
 }
 
+interface MobileSelectOptionListProps {
+  options: SelectOption[];
+  value: string | undefined;
+  size: "1" | "2" | "3";
+  onSelect: (value: string) => void;
+  onAction: () => void;
+}
+
+function MobileSelectOptionList({
+  options,
+  value,
+  size,
+  onSelect,
+  onAction,
+}: MobileSelectOptionListProps) {
+  return (
+    <div className="mobile-select-option-list">
+      {options.map((option) => {
+        const isSelected = option.value === value;
+
+        return (
+          <Fragment key={option.value}>
+            <SelectOptionWithActions
+              option={option}
+              onAction={onAction}
+            >
+              <button
+                type="button"
+                disabled={option.disabled}
+                data-slot="mobile-select-item"
+                data-state={isSelected ? "checked" : "unchecked"}
+                aria-pressed={isSelected}
+                className="mobile-select-item"
+                onClick={() => onSelect(option.value)}
+              >
+                <SelectOptionContent
+                  option={option}
+                  size={size}
+                />
+                {isSelected ? (
+                  <Check
+                    size={16}
+                    aria-hidden="true"
+                    className="mobile-select-item__check"
+                  />
+                ) : null}
+              </button>
+            </SelectOptionWithActions>
+            {option.separatorAfter ? <div className="mobile-select-separator" /> : null}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
 export interface LabeledSelectProps {
   label?: string;
   value: string | undefined;
@@ -224,9 +331,10 @@ export function LabeledSelect({
   variant = "default",
   triggerAriaLabel,
 }: LabeledSelectProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const { t } = useTranslation();
+  const { isMobile } = useAppShell();
+  const [isOpen, setIsOpen] = useExclusiveSelect();
   const actionCloseRef = useRef(false);
-  const hasActions = options.some((option) => Boolean(option.actions));
   const triggerPointerTypeRef = useRef<string | null>(null);
   const shouldKeepFocusOnTouch = keepFocusOnTouch && Boolean(onTouchTrigger);
   const selectedOption = options.find((opt) => opt.value === value);
@@ -263,7 +371,7 @@ export function LabeledSelect({
       onTouchTrigger?.();
       setIsOpen((open) => !open);
     },
-    [onTouchTrigger, shouldKeepFocusOnTouch],
+    [onTouchTrigger, shouldKeepFocusOnTouch, setIsOpen],
   );
 
   const handleContentRef = useCallback(
@@ -281,15 +389,11 @@ export function LabeledSelect({
       value={value || undefined}
       onValueChange={onChange}
       disabled={disabled}
-      open={shouldKeepFocusOnTouch || hasActions ? isOpen : undefined}
-      onOpenChange={
-        shouldKeepFocusOnTouch || hasActions
-          ? (open) => {
-              if (open) actionCloseRef.current = false;
-              setIsOpen(open);
-            }
-          : undefined
-      }
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (open) actionCloseRef.current = false;
+        setIsOpen(open);
+      }}
       size={size}
     >
       <Select.Trigger
@@ -338,7 +442,7 @@ export function LabeledSelect({
         onFocusCapture={onContentFocusCapture}
         onCloseAutoFocus={(event) => {
           onContentCloseAutoFocus?.(event);
-          if (actionCloseRef.current) event.preventDefault();
+          preventFocusRestore(event, actionCloseRef.current);
         }}
       >
         {options.map((option) => (
@@ -379,8 +483,90 @@ export function LabeledSelect({
     </Select.Root>
   );
 
+  const mobileSelectControl = (
+    <MobileSelectSheet
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (open) actionCloseRef.current = false;
+        setIsOpen(open);
+      }}
+      title={label ?? placeholder ?? t("select.title")}
+      trigger={
+        <button
+          type="button"
+          disabled={disabled}
+          className={clsx(
+            "rt-reset",
+            "rt-SelectTrigger",
+            `rt-r-size-${size}`,
+            "rt-variant-surface",
+            !isIconVariant && "select-trigger--background",
+            isIconVariant && "select-trigger--icon",
+            triggerClassName,
+          )}
+          style={
+            selectedOption?.labelColor
+              ? ({
+                  "--select-label-color": selectedOption.labelColor,
+                  ...triggerStyle,
+                } as CSSProperties)
+              : triggerStyle
+          }
+          aria-label={triggerAriaLabel ?? label ?? triggerLabel}
+          data-state={isOpen ? "open" : "closed"}
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          onPointerDown={handleTriggerPointerDown}
+        >
+          <span className="rt-SelectTriggerInner">
+            <Flex
+              align="center"
+              justify={isTriggerLabelVisible ? undefined : "center"}
+              gap={isTriggerLabelVisible ? "2" : "0"}
+              className={isTriggerLabelVisible ? undefined : "select-trigger-content--icon-only"}
+            >
+              {triggerPrefix}
+              {selectedOption?.prefix}
+              {isTriggerLabelVisible && triggerLabel && (
+                <Text
+                  size={size}
+                  color={selectedOption ? undefined : "gray"}
+                  className="select-option-label"
+                  style={{ fontFamily: selectedOption?.fontFamily }}
+                >
+                  {triggerLabel}
+                </Text>
+              )}
+            </Flex>
+          </span>
+          <ChevronDownIcon
+            aria-hidden="true"
+            className="rt-SelectIcon"
+          />
+        </button>
+      }
+    >
+      <MobileSelectOptionList
+        options={options}
+        value={value}
+        size={size}
+        onSelect={(nextValue) => {
+          onChange(nextValue);
+          onTouchTrigger?.();
+          setIsOpen(false);
+        }}
+        onAction={() => {
+          actionCloseRef.current = true;
+          setIsOpen(false);
+        }}
+      />
+    </MobileSelectSheet>
+  );
+
+  const renderedSelectControl = isMobile ? mobileSelectControl : selectControl;
+
   if (!label) {
-    return selectControl;
+    return renderedSelectControl;
   }
 
   if (layout === "horizontal") {
@@ -396,7 +582,7 @@ export function LabeledSelect({
         >
           {label}
         </Text>
-        {selectControl}
+        {renderedSelectControl}
       </Flex>
     );
   }
@@ -413,7 +599,7 @@ export function LabeledSelect({
       >
         {label}
       </Text>
-      {selectControl}
+      {renderedSelectControl}
     </Flex>
   );
 }
@@ -437,29 +623,26 @@ export function SimpleSelect({
   LabeledSelectProps,
   "label" | "labelSize" | "labelWeight" | "labelColor" | "layout" | "gap"
 >) {
-  const [isOpen, setIsOpen] = useState(false);
+  const { t } = useTranslation();
+  const { isMobile } = useAppShell();
+  const [isOpen, setIsOpen] = useExclusiveSelect();
   const actionCloseRef = useRef(false);
-  const hasActions = options.some((option) => Boolean(option.actions));
   const selectedOption = options.find((opt) => opt.value === value);
   const triggerLabel = selectedOption?.label || placeholder;
   const isIconVariant = variant === "icon";
   const isTriggerLabelVisible = !isIconVariant && triggerLabelVisible;
 
-  return (
+  const selectControl = (
     <Select.Root
       value={value || undefined}
       onValueChange={onChange}
       disabled={disabled}
       size={size}
-      open={hasActions ? isOpen : undefined}
-      onOpenChange={
-        hasActions
-          ? (open) => {
-              if (open) actionCloseRef.current = false;
-              setIsOpen(open);
-            }
-          : undefined
-      }
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (open) actionCloseRef.current = false;
+        setIsOpen(open);
+      }}
     >
       <Select.Trigger
         className={clsx(
@@ -504,7 +687,7 @@ export function SimpleSelect({
         position={contentPosition}
         className={contentClassName}
         onCloseAutoFocus={(event) => {
-          if (actionCloseRef.current) event.preventDefault();
+          preventFocusRestore(event, actionCloseRef.current);
         }}
       >
         {options.map((option) => (
@@ -532,6 +715,90 @@ export function SimpleSelect({
       </Select.Content>
     </Select.Root>
   );
+
+  const mobileSelectControl = (
+    <MobileSelectSheet
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (open) actionCloseRef.current = false;
+        setIsOpen(open);
+      }}
+      title={placeholder ?? t("select.title")}
+      trigger={
+        <button
+          type="button"
+          disabled={disabled}
+          className={clsx(
+            "rt-reset",
+            "rt-SelectTrigger",
+            `rt-r-size-${size}`,
+            "rt-variant-surface",
+            !isIconVariant && "select-trigger--background",
+            isIconVariant && "select-trigger--icon",
+            triggerClassName,
+          )}
+          style={
+            selectedOption?.labelColor
+              ? ({
+                  "--select-label-color": selectedOption.labelColor,
+                  ...triggerStyle,
+                } as CSSProperties)
+              : triggerStyle
+          }
+          aria-label={triggerAriaLabel ?? triggerLabel}
+          data-state={isOpen ? "open" : "closed"}
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+        >
+          <span className="rt-SelectTriggerInner">
+            <Flex
+              align="center"
+              justify={isTriggerLabelVisible ? undefined : "center"}
+              gap={isTriggerLabelVisible ? "2" : "0"}
+              className={
+                isTriggerLabelVisible
+                  ? "select-trigger-content"
+                  : "select-trigger-content--icon-only"
+              }
+            >
+              {triggerPrefix}
+              {selectedOption?.prefix}
+              {isTriggerLabelVisible && triggerLabel && (
+                <Text
+                  size={size}
+                  color={selectedOption ? undefined : "gray"}
+                  className="select-option-label"
+                  style={{ fontFamily: selectedOption?.fontFamily }}
+                >
+                  {triggerLabel}
+                </Text>
+              )}
+            </Flex>
+          </span>
+          <ChevronDownIcon
+            aria-hidden="true"
+            className="rt-SelectIcon"
+          />
+        </button>
+      }
+    >
+      <MobileSelectOptionList
+        options={options}
+        value={value}
+        size={size}
+        onSelect={(nextValue) => {
+          onChange(nextValue);
+          setIsOpen(false);
+        }}
+        onAction={() => {
+          actionCloseRef.current = true;
+          setIsOpen(false);
+        }}
+      />
+    </MobileSelectSheet>
+  );
+
+  return isMobile ? mobileSelectControl : selectControl;
 }
 
 export function SearchableSelect({
@@ -553,9 +820,11 @@ export function SearchableSelect({
   contentHeight = 260,
 }: SearchableSelectProps) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
+  const { isMobile } = useAppShell();
   const actionCloseRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const resetSearch = useCallback(() => setSearchQuery(""), []);
+  const [open, setOpen] = useExclusiveSelect(resetSearch);
   const resolvedSearchPlaceholder = searchPlaceholder ?? t("select.searchPlaceholder");
   const resolvedEmptyMessage = emptyMessage ?? t("select.noMatchingOptions");
   const selectedOption = options.find((opt) => opt.value === value);
@@ -582,74 +851,91 @@ export function SearchableSelect({
     setSearchQuery("");
   };
 
-  const selectControl = (
-    <Popover.Root
-      open={open}
-      onOpenChange={handleOpenChange}
+  const trigger = (
+    <Button
+      type="button"
+      variant="surface"
+      color="gray"
+      disabled={disabled}
+      className="select-trigger--background"
+      data-slot="searchable-select-trigger"
+      data-state={open ? "open" : "closed"}
+      aria-expanded={open}
+      aria-haspopup="listbox"
+      style={{ width: "100%", justifyContent: "space-between", ...triggerStyle }}
+      size={size}
     >
-      <Popover.Trigger>
-        <Button
-          type="button"
-          variant="surface"
-          color="gray"
-          disabled={disabled}
-          className="select-trigger--background"
-          data-slot="searchable-select-trigger"
-          data-state={open ? "open" : "closed"}
-          style={{ width: "100%", justifyContent: "space-between", ...triggerStyle }}
+      <Flex
+        align="center"
+        gap="2"
+        className="select-trigger-content"
+      >
+        {selectedOption?.prefix}
+        <Text
+          size={size}
+          color={selectedOption ? undefined : "gray"}
+          className="select-option-label"
+          style={{ fontFamily: selectedOption?.fontFamily }}
+        >
+          {selectedOption?.label || placeholder}
+        </Text>
+      </Flex>
+      <ChevronDown
+        size={16}
+        aria-hidden="true"
+      />
+    </Button>
+  );
+
+  const searchableContent = (
+    <>
+      <Box
+        p="2"
+        className="searchable-select-search-box"
+      >
+        <TextField.Root
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder={resolvedSearchPlaceholder}
+          autoFocus={!isMobile}
           size={size}
         >
+          <TextField.Slot>
+            <Search
+              size={16}
+              aria-hidden="true"
+            />
+          </TextField.Slot>
+        </TextField.Root>
+      </Box>
+
+      {isMobile ? (
+        filteredOptions.length > 0 ? (
+          <MobileSelectOptionList
+            options={filteredOptions}
+            value={value}
+            size={size}
+            onSelect={handleSelect}
+            onAction={() => {
+              actionCloseRef.current = true;
+              handleOpenChange(false);
+            }}
+          />
+        ) : (
           <Flex
             align="center"
-            gap="2"
-            className="select-trigger-content"
+            justify="center"
+            p="4"
           >
-            {selectedOption?.prefix}
             <Text
-              size={size}
-              color={selectedOption ? undefined : "gray"}
-              className="select-option-label"
-              style={{ fontFamily: selectedOption?.fontFamily }}
+              size="2"
+              color="gray"
             >
-              {selectedOption?.label || placeholder}
+              {resolvedEmptyMessage}
             </Text>
           </Flex>
-          <ChevronDown
-            size={16}
-            aria-hidden="true"
-          />
-        </Button>
-      </Popover.Trigger>
-
-      <Popover.Content
-        align="start"
-        data-slot="searchable-select-content"
-        className="searchable-select-content"
-        onCloseAutoFocus={(event) => {
-          if (actionCloseRef.current) event.preventDefault();
-        }}
-        style={{ width: "var(--radix-popover-trigger-width)" }}
-      >
-        <Box
-          p="2"
-          className="searchable-select-search-box"
-        >
-          <TextField.Root
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={resolvedSearchPlaceholder}
-            autoFocus
-            size={size}
-          >
-            <TextField.Slot>
-              <Search
-                size={16}
-                aria-hidden="true"
-              />
-            </TextField.Slot>
-          </TextField.Root>
-        </Box>
-
+        )
+      ) : (
         <ScrollArea style={{ height: contentHeight }}>
           <Flex
             direction="column"
@@ -696,12 +982,46 @@ export function SearchableSelect({
             )}
           </Flex>
         </ScrollArea>
+      )}
+    </>
+  );
+
+  const selectControl = (
+    <Popover.Root
+      open={open}
+      onOpenChange={handleOpenChange}
+    >
+      <Popover.Trigger>{trigger}</Popover.Trigger>
+      <Popover.Content
+        align="start"
+        data-slot="searchable-select-content"
+        className="searchable-select-content"
+        onCloseAutoFocus={(event) => {
+          if (actionCloseRef.current) event.preventDefault();
+        }}
+        style={{ width: "var(--radix-popover-trigger-width)" }}
+      >
+        {searchableContent}
       </Popover.Content>
     </Popover.Root>
   );
 
+  const mobileSelectControl = (
+    <MobileSelectSheet
+      open={open}
+      onOpenChange={handleOpenChange}
+      title={label ?? placeholder ?? t("select.title")}
+      trigger={trigger}
+      contentClassName="searchable-select-sheet-content"
+    >
+      {searchableContent}
+    </MobileSelectSheet>
+  );
+
+  const renderedSelectControl = isMobile ? mobileSelectControl : selectControl;
+
   if (!label) {
-    return selectControl;
+    return renderedSelectControl;
   }
 
   if (layout === "horizontal") {
@@ -717,7 +1037,7 @@ export function SearchableSelect({
         >
           {label}
         </Text>
-        {selectControl}
+        {renderedSelectControl}
       </Flex>
     );
   }
@@ -734,7 +1054,7 @@ export function SearchableSelect({
       >
         {label}
       </Text>
-      {selectControl}
+      {renderedSelectControl}
     </Flex>
   );
 }

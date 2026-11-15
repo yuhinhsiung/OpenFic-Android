@@ -11,6 +11,7 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
+import { useAppShell } from "@/features/app-shell/components/app-shell-context";
 import {
   buildSkillCommandTag,
   findActiveCommandQuery,
@@ -208,6 +209,7 @@ export function AgentComposerEditor({
   const [mentionQuery, setMentionQuery] = useState<MentionQueryState>(
     createClosedMentionQueryState,
   );
+  const { isMobile } = useAppShell();
 
   const normalizedQuery = mentionQuery.query.trim();
   const shouldSearchSuggestionItems =
@@ -260,6 +262,7 @@ export function AgentComposerEditor({
       }),
       Placeholder.configure({
         placeholder,
+        showOnlyWhenEditable: false,
       }),
       MentionNode.configure({
         onOpenMentionChapter,
@@ -361,11 +364,12 @@ export function AgentComposerEditor({
 
   useEffect(() => {
     if (!editor) return;
+    if (!value.trim() || editor.isFocused) return;
     const parsedSegments = parseAssistantMarkup(value);
     const hasOnlyMentions =
       parsedSegments.length > 0 &&
       parsedSegments.every((segment) => typeof segment !== "string" || !segment.trim());
-    if (hasOnlyMentions && !value.includes("\n") && !editor.isFocused) {
+    if (hasOnlyMentions && !value.includes("\n")) {
       editor.commands.focus("end");
     }
   }, [editor, value]);
@@ -445,6 +449,9 @@ export function AgentComposerEditor({
       }
 
       if (event.key !== "Enter") return;
+      // On mobile, Enter is reserved for IME confirmation or inserting a
+      // newline; messages are sent with the button instead.
+      if (isMobile) return;
       // IME composition guard: when a CJK input method is composing (pinyin
       // candidates etc.), Enter confirms the composition and must not submit.
       if (event.nativeEvent.isComposing || event.keyCode === 229) return;
@@ -477,6 +484,7 @@ export function AgentComposerEditor({
     [
       disabled,
       editor,
+      isMobile,
       mentionQuery.visible,
       onHistoryNavigate,
       onSubmit,

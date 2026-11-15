@@ -1,5 +1,79 @@
 # Changelog
 
+## [0.13.0](https://github.com/syrizelink/OpenFic/compare/v0.12.1...v0.13.0) (2026-10-28)
+
+
+### ✨ 新功能
+
+* **agent:** 新增 Skill 管理工具 ([#478](https://github.com/syrizelink/OpenFic/issues/478)) ([8a5478d](https://github.com/syrizelink/OpenFic/commit/8a5478d74f0c57255ce419cf6dfe492c729d5709))
+* **asr:** 支持基于本地模型与云服务商的语音转写 ([#455](https://github.com/syrizelink/OpenFic/issues/455)) ([7a14cca](https://github.com/syrizelink/OpenFic/commit/7a14ccaee7c7d002259d8e8f0c30ff6cfe80b8e6))
+* **backend:** 支持 PostgreSQL 数据库后端 ([#452](https://github.com/syrizelink/OpenFic/issues/452)) ([8ce5cb8](https://github.com/syrizelink/OpenFic/commit/8ce5cb8c1dbbd8947c314460f795dfcd629bf9eb))
+* **mobile:** 新增 Android 远程连接客户端 ([#460](https://github.com/syrizelink/OpenFic/issues/460)) ([37e95a9](https://github.com/syrizelink/OpenFic/commit/37e95a93ed0800eeccad0561e2906d8f16ba5527))
+* **tunnels:** 支持设置基于提供商的隧道以启用远程连接 ([#453](https://github.com/syrizelink/OpenFic/issues/453)) ([1035d1e](https://github.com/syrizelink/OpenFic/commit/1035d1e4a5b9a152350f71e6fcebe6e4d107b2ff))
+
+
+### 🐛 问题修复
+
+* **agent:** 修复变更汇总和轮次 Diff 详情不准确的问题 ([#477](https://github.com/syrizelink/OpenFic/issues/477)) ([a48f336](https://github.com/syrizelink/OpenFic/commit/a48f336b89c3dcb0fe9a83cbdfb8ba4ce5d5cf24))
+* **agent:** 修复模型以 JSON 字符串格式传递工具对象参数时解析失败的问题 ([#450](https://github.com/syrizelink/OpenFic/issues/450)) ([cc98518](https://github.com/syrizelink/OpenFic/commit/cc985187950f125702ab2c5bf1163ae7caf2e5f3))
+* **agent:** 修复流式传输在特定情况下导致工具名重复拼接的问题 ([#456](https://github.com/syrizelink/OpenFic/issues/456)) ([a8b138c](https://github.com/syrizelink/OpenFic/commit/a8b138ccd61ca5098192146f4fa34bf22092ec4b))
+* **agent:** 按模型协议路由 OpenCode Zen/Go 请求 ([#427](https://github.com/syrizelink/OpenFic/issues/427)) ([03549b5](https://github.com/syrizelink/OpenFic/commit/03549b5eba2a173be06e11ea9a55301e95d05491))
+* **desktop:** 修复因仪表盘日期时区错误与日志读取的性能问题导致的无响应 ([#466](https://github.com/syrizelink/OpenFic/issues/466)) ([41397ef](https://github.com/syrizelink/OpenFic/commit/41397efa2ee575c98d48a99ddf3e036ed115495c))
+* **desktop:** 修复认证状态未持久化导致重启后要求重新输入密码的问题 ([#470](https://github.com/syrizelink/OpenFic/issues/470)) ([568605b](https://github.com/syrizelink/OpenFic/commit/568605b3172805e7d9dcef43566be15f55bccf59))
+* **frontend:** 修复 Agent 消息自动滚动跟随在某些场景下失效的问题 ([#475](https://github.com/syrizelink/OpenFic/issues/475)) ([76ebea9](https://github.com/syrizelink/OpenFic/commit/76ebea90bbc7d864dee4ad694cc8aac3a736d01e))
+* **frontend:** 修复单美元行内 LaTeX 公式未渲染的问题 ([#469](https://github.com/syrizelink/OpenFic/issues/469)) ([d510408](https://github.com/syrizelink/OpenFic/commit/d5104082132f17b326f05e155a728d6d49bc2c36))
+* **frontend:** 修复窗口恢复时编辑内容和空列表项丢失的问题 ([#471](https://github.com/syrizelink/OpenFic/issues/471)) ([7c5eb95](https://github.com/syrizelink/OpenFic/commit/7c5eb95f2ce47d698d38c12a6c7c0b35ce439115))
+* **frontend:** 修复部分提供商无法配置嵌入维度的问题并支持自动获取维度 ([#472](https://github.com/syrizelink/OpenFic/issues/472)) ([1fc72e2](https://github.com/syrizelink/OpenFic/commit/1fc72e25dd8b68cd4d5d56f3b00243bdb844d0b7))
+* **frontend:** 修复章节首行缩进在保存重载时丢失的问题 ([#476](https://github.com/syrizelink/OpenFic/issues/476)) ([216d66a](https://github.com/syrizelink/OpenFic/commit/216d66aad5687e96544c30534d7d300fb7c9738f))
+* **mobile:** 修复 Android 麦克风权限未转发导致语音撰写不可用的问题 ([#481](https://github.com/syrizelink/OpenFic/issues/481)) ([c343ba4](https://github.com/syrizelink/OpenFic/commit/c343ba4d99c255edeff97e858ec41f49cdf51d7a))
+
+
+### 🔧 杂项
+
+* **agent:** 支持 DeepSeek 联网搜索 ([#454](https://github.com/syrizelink/OpenFic/issues/454)) ([e0db008](https://github.com/syrizelink/OpenFic/commit/e0db008d9c1b4a33289185933aed052e67d264f9))
+* **agent:** 添加会话模型超时设置 ([#474](https://github.com/syrizelink/OpenFic/issues/474)) ([8e56e5a](https://github.com/syrizelink/OpenFic/commit/8e56e5a34f982b911cd3783553b512081fc303e0))
+* **agent:** 添加内置的 Skill 创建与小说文风蒸馏实验性技能 ([#479](https://github.com/syrizelink/OpenFic/issues/479)) ([7007a30](https://github.com/syrizelink/OpenFic/commit/7007a3042e1eb0ffd4f790cac355fe5b8d160fcc))
+* **backend:** 适配 Models.dev 目录中的模型级路由配置 ([#467](https://github.com/syrizelink/OpenFic/issues/467)) ([34d7bf6](https://github.com/syrizelink/OpenFic/commit/34d7bf6ed57bd043e03a145ea25ee54d29b9928b))
+* **desktop:** 优化桌面端的镜像源选用逻辑以支持无外网环境使用 ([#468](https://github.com/syrizelink/OpenFic/issues/468)) ([da013c8](https://github.com/syrizelink/OpenFic/commit/da013c8861fb688da3d118fa23964e5ae98a889a))
+* **frontend:** 修复部分前端样式和布局错误 ([#480](https://github.com/syrizelink/OpenFic/issues/480)) ([7f27e0d](https://github.com/syrizelink/OpenFic/commit/7f27e0d445a2bf799a89c22cd317bc5d5164f70a))
+* **provider:** 添加 Requesty 提供商 ([#420](https://github.com/syrizelink/OpenFic/issues/420)) ([d578743](https://github.com/syrizelink/OpenFic/commit/d578743fda02024f42c191bfdf73388e3f78469a))
+
+## [0.12.1](https://github.com/syrizelink/OpenFic/compare/v0.12.0...v0.12.1) (2026-10-11)
+
+
+### 🐛 问题修复
+
+* **agent:** 修复 Agent 会话消息区域的布局问题 ([#444](https://github.com/syrizelink/OpenFic/issues/444)) ([937d5d6](https://github.com/syrizelink/OpenFic/commit/937d5d6ccfda17b2873c4c40ff035cb9154d0fb1))
+* **agent:** 修复 subagent 会话无法触发自动压缩的问题 ([#436](https://github.com/syrizelink/OpenFic/issues/436)) ([fc657ca](https://github.com/syrizelink/OpenFic/commit/fc657cad9f42711f146f1f14dda3e2228bdd224d))
+* **agent:** 修复中文输入法组合态 Enter 键误识别为发送的问题 ([#423](https://github.com/syrizelink/OpenFic/issues/423)) ([07122df](https://github.com/syrizelink/OpenFic/commit/07122df44d27a0cc34075753dcf9b59e6d2b6cf6))
+* **agent:** 修复移动端输入法回车换行误识别为发送的问题 ([#438](https://github.com/syrizelink/OpenFic/issues/438)) ([0bf5dfc](https://github.com/syrizelink/OpenFic/commit/0bf5dfcb98a6b1f4aa5edc3968e1f90d8393843a))
+* **agent:** 修复编辑总结块在轮次结束前提前显示的问题 ([#434](https://github.com/syrizelink/OpenFic/issues/434)) ([c47570a](https://github.com/syrizelink/OpenFic/commit/c47570ac7feae795fbcddd7ec89c4585c23fe5c0))
+* **backend:** 修复章节导出产物在有效期内被清理的问题 ([#385](https://github.com/syrizelink/OpenFic/issues/385)) ([5d020cc](https://github.com/syrizelink/OpenFic/commit/5d020ccd212bdb2dbf9ee36658657a9d0edb05a4))
+* **frontend:** 修复 Agent 会话自动滚动难以解锁的问题 ([#447](https://github.com/syrizelink/OpenFic/issues/447)) ([1af851f](https://github.com/syrizelink/OpenFic/commit/1af851ffab446216c3b00dbd2f581e4c1d3628ed))
+* **frontend:** 修复编辑器保存时光标移位和草稿丢失的问题 ([#433](https://github.com/syrizelink/OpenFic/issues/433)) ([3bdf573](https://github.com/syrizelink/OpenFic/commit/3bdf5733eaf7dbbc22b89bcbc8b2b30f6dcdf7bc))
+* **provider:** 修复提供商连接验证时的误导性逻辑并细化错误显示 ([#445](https://github.com/syrizelink/OpenFic/issues/445)) ([2f2a90d](https://github.com/syrizelink/OpenFic/commit/2f2a90d15f1a5e796d2c57578e504c5627d7712e))
+
+
+### ⚡ 性能优化
+
+* **agent:** 优化长上下文下 Agent 会话的首屏加载资源大小与速度 ([#439](https://github.com/syrizelink/OpenFic/issues/439)) ([dd83a17](https://github.com/syrizelink/OpenFic/commit/dd83a176fda52cd25e029837d5a37e1695394cfa))
+* **agent:** 按游标分页加载 Agent 会话历史消息 ([#441](https://github.com/syrizelink/OpenFic/issues/441)) ([69c180a](https://github.com/syrizelink/OpenFic/commit/69c180ac20d918ddd50e5e034e563a804133fb9d))
+* **storage:** 优化dashboard相关查询接口请求大小和速度 ([#443](https://github.com/syrizelink/OpenFic/issues/443)) ([62283a3](https://github.com/syrizelink/OpenFic/commit/62283a3804b56a0f6a271d63a54c0bb6cadebd81))
+
+
+### 📚 文档
+
+* 更新 README ([#440](https://github.com/syrizelink/OpenFic/issues/440)) ([77181c0](https://github.com/syrizelink/OpenFic/commit/77181c066378bcaab00d459ed34f49ba3af9e4c2))
+
+
+### 🔧 杂项
+
+* **agent:** 支持会话中断或被取消时按原状态继续 ([#446](https://github.com/syrizelink/OpenFic/issues/446)) ([1821fd0](https://github.com/syrizelink/OpenFic/commit/1821fd0328b970473c483836ab02bc49b2cd077f))
+* **frontend:** 优化移动端交互与用户体验 ([#442](https://github.com/syrizelink/OpenFic/issues/442)) ([4dd3a8a](https://github.com/syrizelink/OpenFic/commit/4dd3a8a634c309780e5320f8b3287c70b79b2b26))
+* **frontend:** 升级 Streamdown 至 2.7.0 并移除兼容补丁 ([#435](https://github.com/syrizelink/OpenFic/issues/435)) ([94e342d](https://github.com/syrizelink/OpenFic/commit/94e342dd5210da2d8325e56e6a1cfe70fd5d7f92))
+* **provider:** 支持 OpenAI Codex 提供商 (使用 ChatGPT Plan 额度) ([#429](https://github.com/syrizelink/OpenFic/issues/429)) ([12d27da](https://github.com/syrizelink/OpenFic/commit/12d27da82a5144aa1ff904424fae8ab32d611451))
+* 添加 Infistar 提供商 ([#437](https://github.com/syrizelink/OpenFic/issues/437)) ([9d85a5d](https://github.com/syrizelink/OpenFic/commit/9d85a5d7523467b48d0000d4636a28652de6dd22))
+
 ## [0.12.0](https://github.com/syrizelink/OpenFic/compare/v0.11.1...v0.12.0) (2026-09-25)
 
 

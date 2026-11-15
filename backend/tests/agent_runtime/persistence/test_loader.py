@@ -97,9 +97,11 @@ async def test_load_history_includes_visible_child_user_requests(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("content", ["请看附件", "", "   "])
 async def test_load_history_preserves_user_attachment_metadata(
     db_session: AsyncSession,
     sample_task,
+    content: str,
 ) -> None:
     await repo.insert_message(
         db_session,
@@ -107,7 +109,7 @@ async def test_load_history_preserves_user_attachment_metadata(
         task_id=sample_task.id,
         project_id=sample_task.project_id,
         role="user",
-        content="请看附件",
+        content=content,
         status="sent",
         metadata={
             "attachments": [
@@ -122,8 +124,9 @@ async def test_load_history_preserves_user_attachment_metadata(
 
     messages = await load_history(db_session, "session-with-image")
 
+    assert len(messages) == 1
     assert isinstance(messages[0], HumanMessage)
-    assert messages[0].content == "请看附件"
+    assert messages[0].content == content
     assert messages[0].additional_kwargs["openfic_attachments"] == [
         {
             "id": "attachment-1",
@@ -929,3 +932,69 @@ async def test_load_history_preserves_full_write_tool_result_payload(
         "affected_chapters": ["chap-1"],
         "message": "章节已写入",
     }
+
+
+@pytest.mark.asyncio
+async def test_load_history_restores_tool_call_extra_content(
+    db_session: AsyncSession, sample_task
+):
+    sid = "session_a"
+    extra = {"call-1": {"google": {"thought_signature": "sig-abc-123"}}}
+    await repo.insert_message(
+        db_session,
+        session_id=sid,
+        task_id=sample_task.id,
+        project_id=sample_task.project_id,
+        role="assistant",
+        content="",
+        status="complete",
+        tool_calls=[{"id": "call-1", "name": "get_weather", "args": {"city": "Paris"}}],
+        metadata={"tool_call_extra_content": extra},
+    )
+    await repo.insert_message(
+        db_session,
+        session_id=sid,
+        task_id=sample_task.id,
+        project_id=sample_task.project_id,
+        role="tool",
+        content="sunny",
+        status="complete",
+        tool_call_id="call-1",
+        tool_name="get_weather",
+    )
+    msgs = await load_history(db_session, sid)
+    assert len(msgs) == 2
+    assert msgs[0].additional_kwargs["tool_call_extra_content"] == extra
+
+
+@pytest.mark.asyncio
+async def test_load_history_partial_assistant_does_not_restore_tool_call_extra_content(
+    db_session: AsyncSession, sample_task
+):
+    sid = "session_a"
+    extra = {"call-1": {"google": {"thought_signature": "sig-abc-123"}}}
+    await repo.insert_message(
+        db_session,
+        session_id=sid,
+        task_id=sample_task.id,
+        project_id=sample_task.project_id,
+        role="assistant",
+        content="half",
+        status="partial",
+        tool_calls=[{"id": "call-1", "name": "get_weather", "args": {}}],
+        metadata={"tool_call_extra_content": extra},
+    )
+    await repo.insert_message(
+        db_session,
+        session_id=sid,
+        task_id=sample_task.id,
+        project_id=sample_task.project_id,
+        role="tool",
+        content="[中断] 工具未执行",
+        status="aborted",
+        tool_call_id="call-1",
+        tool_name="get_weather",
+    )
+    msgs = await load_history(db_session, sid)
+    assert len(msgs) == 2
+    assert "tool_call_extra_content" not in msgs[0].additional_kwargs

@@ -147,7 +147,11 @@ async def test_validate_model_connection_reports_failed_provider_request(
     response = await client.post(f"/api/v1/models/{model.id}/validate")
 
     assert response.status_code == 200
-    assert response.json() == {"success": False, "message": "模型连接验证失败"}
+    result = response.json()
+    assert result["success"] is False
+    assert "模型连接验证失败" in result["message"]
+    assert "401" in result["message"]
+    assert "Invalid API key" in result["message"]
 
 
 @pytest.mark.asyncio
@@ -415,6 +419,38 @@ async def test_update_model(client: AsyncClient, session: AsyncSession):
     data = response.json()
     assert data["name"] == "New Name"
     assert data["temperature"] == 0.8
+
+
+@pytest.mark.asyncio
+async def test_update_model_omitting_max_tokens_preserves_value_and_null_clears_it(
+    client: AsyncClient, session: AsyncSession
+):
+    from app.core.encryption import EncryptionService
+    from app.settings import settings
+
+    provider = await model_provider_repo.create(
+        session=session,
+        name="Test Provider",
+        url="https://api.example.com",
+        api_key_encrypted=EncryptionService(settings.encryption_key).encrypt("test-key"),
+        provider_type="anthropic",
+    )
+    model = await model_repo.create(
+        session=session,
+        name="Claude",
+        provider_id=provider.id,
+        model_id="claude-opus-4-6",
+        max_tokens=8192,
+    )
+    await session.commit()
+
+    response = await client.put(f"/api/v1/models/{model.id}", json={"name": "Renamed"})
+    assert response.status_code == 200
+    assert response.json()["max_tokens"] == 8192
+
+    response = await client.put(f"/api/v1/models/{model.id}", json={"max_tokens": None})
+    assert response.status_code == 200
+    assert response.json()["max_tokens"] is None
 
 
 @pytest.mark.asyncio

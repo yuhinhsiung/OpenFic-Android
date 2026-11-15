@@ -201,6 +201,8 @@ async def update(
     cache_read_price: float | None = None,
     cache_write_price: float | None = None,
     dimensions: int | None = None,
+    clear_dimensions: bool = False,
+    clear_max_tokens: bool = False,
 ) -> Model | None:
     """
     更新模型。
@@ -256,7 +258,7 @@ async def update(
         model.presence_penalty = presence_penalty
     if repetition_penalty is not None:
         model.repetition_penalty = repetition_penalty
-    if max_tokens is not None:
+    if max_tokens is not None or clear_max_tokens:
         model.max_tokens = max_tokens
     if context_length is not None:
         model.context_length = context_length
@@ -268,7 +270,7 @@ async def update(
         model.cache_read_price = cache_read_price
     if cache_write_price is not None:
         model.cache_write_price = cache_write_price
-    if dimensions is not None:
+    if dimensions is not None or clear_dimensions:
         model.dimensions = dimensions
 
     model.updated_at = datetime.now(UTC)

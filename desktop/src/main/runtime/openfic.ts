@@ -1,13 +1,8 @@
-import { net } from "electron";
 import { spawn } from "node:child_process";
 import { access, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { findFreePort } from "../ports.js";
-import {
-  abortStartingBackendProcess,
-  startBackendProcess,
-  type BackendProcessHandle,
-} from "../process.js";
+import { abortStartingBackendProcess, startBackendProcess, type BackendProcessHandle } from "../process.js";
 import { configureDefaultSystemProxy, getSystemProxyEnvironment } from "../proxy.js";
 import { throwIfAborted, waitForBackend } from "../health.js";
 import type { PortablePython, RuntimeIntegrityCheck } from "./python.js";
@@ -19,13 +14,13 @@ import {
 } from "./openfic-commands.js";
 import type { StartupProgressTracker, ProgressUpdate } from "../startup-progress.js";
 import { appendLog, createLogStream } from "../logging.js";
+import { fetchSourceText, getDownloadSourcePreference, orderDownloadSources } from "../download-sources.js";
 
 export type OpenFicRuntimeStep = "create-venv" | "install-uv" | "install-openfic";
 
 const ANSI_ESCAPE_SEQUENCE = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*[A-Za-z]`, "g");
 const DEFAULT_PYPI_INDEX_URL = "https://pypi.org/simple/";
-const TSINGHUA_PYPI_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple/";
-const PYPI_INDEX_PROBE_TIMEOUT_MS = 5_000;
+const MIRROR_PYPI_INDEX_URL = "https://mirrors.cernet.edu.cn/pypi/web/simple/";
 const BACKEND_READY_TIMEOUT_MS = 60 * 60_000;
 const PYPI_INDEX_PROBE_PACKAGE = "openfic";
 const UV_SYSTEM_CERTS_HINT = "Consider enabling use of system TLS certificates";
@@ -33,11 +28,6 @@ const UTF8_PYTHON_ENVIRONMENT = {
   PYTHONIOENCODING: "utf-8",
   PYTHONUTF8: "1",
 };
-
-interface PypiIndexProbe {
-  indexUrl: string;
-  elapsedMs: number;
-}
 
 function getVenvDir(runtimeDir: string): string {
   return path.join(runtimeDir, "venv");
@@ -70,11 +60,7 @@ async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
-function forwardLines(
-  stream: NodeJS.ReadableStream | null,
-  logStream: NodeJS.WritableStream,
-  onLine?: (line: string) => void,
-): void {
+function forwardLines(stream: NodeJS.ReadableStream | null, logStream: NodeJS.WritableStream, onLine?: (line: string) => void): void {
   if (!stream) return;
 
   let buffer = "";
@@ -102,33 +88,11 @@ function stripAnsi(value: string): string {
   return value.replace(ANSI_ESCAPE_SEQUENCE, "");
 }
 
-async function probePypiIndex(indexUrl: string, expectedVersion: string): Promise<PypiIndexProbe | null> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), PYPI_INDEX_PROBE_TIMEOUT_MS);
-  const startedAt = performance.now();
-  try {
-    appendLog("runtime", `探测 Python 包索引：${indexUrl}`);
-    const response = await net.fetch(`${indexUrl}${PYPI_INDEX_PROBE_PACKAGE}/`, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      appendLog("runtime", `Python 包索引响应异常：${indexUrl}，状态码 ${response.status}`);
-      return null;
-    }
-    const packageIndex = await response.text();
-    const elapsedMs = performance.now() - startedAt;
-    if (!packageIndex.includes(`openfic-${expectedVersion}`)) {
-      appendLog("runtime", `Python 包索引未找到 OpenFic ${expectedVersion}：${indexUrl}`);
-      return null;
-    }
-    appendLog("runtime", `Python 包索引可用：${indexUrl}，耗时 ${Math.round(elapsedMs)}ms`);
-    return { indexUrl, elapsedMs };
-  } catch (error) {
-    appendLog("runtime", `Python 包索引探测失败：${indexUrl}：${error instanceof Error ? error.message : String(error)}`);
-    return null;
-  } finally {
-    clearTimeout(timeout);
+async function probePypiIndex(indexUrl: string, expectedVersion: string): Promise<void> {
+  appendLog("runtime", `探测 Python 包索引：${indexUrl}`);
+  const packageIndex = await fetchSourceText(`${indexUrl}${PYPI_INDEX_PROBE_PACKAGE}/`);
+  if (!packageIndex.includes(`openfic-${expectedVersion}`)) {
+    throw new Error(`Python 包索引未找到 OpenFic ${expectedVersion}：${indexUrl}`);
   }
 }
 
@@ -140,19 +104,22 @@ async function buildPypiEnvironment(indexUrl: string): Promise<NodeJS.ProcessEnv
     UV_INDEX_URL: indexUrl,
     pip_index_url: indexUrl,
     uv_index_url: indexUrl,
+    // Do not let an inherited additional index silently bypass the selected source.
+    PIP_EXTRA_INDEX_URL: "",
+    UV_EXTRA_INDEX_URL: "",
+    pip_extra_index_url: "",
+    uv_extra_index_url: "",
   };
 }
 
-async function getPypiEnvironmentsBySpeed(expectedVersion: string): Promise<NodeJS.ProcessEnv[]> {
+async function getOrderedPypiEnvironments(expectedVersion: string): Promise<NodeJS.ProcessEnv[]> {
   await configureDefaultSystemProxy();
-  const probes = await Promise.all(
-    [DEFAULT_PYPI_INDEX_URL, TSINGHUA_PYPI_INDEX_URL].map((indexUrl) => probePypiIndex(indexUrl, expectedVersion)),
+  const sources = await orderDownloadSources(
+    [{ kind: "default", url: DEFAULT_PYPI_INDEX_URL }, { kind: "mirror", url: MIRROR_PYPI_INDEX_URL }],
+    await getDownloadSourcePreference(),
+    ({ url }) => probePypiIndex(url, expectedVersion),
   );
-  const orderedUrls = probes
-    .filter((probe): probe is PypiIndexProbe => probe !== null)
-    .sort((a, b) => a.elapsedMs - b.elapsedMs)
-    .map((probe) => probe.indexUrl);
-  if (orderedUrls.length === 0) orderedUrls.push(DEFAULT_PYPI_INDEX_URL);
+  const orderedUrls = sources.map(({ url }) => url);
 
   appendLog("runtime", `Python 包索引回退顺序：${orderedUrls.join(", ")}`);
   return Promise.all(orderedUrls.map((indexUrl) => buildPypiEnvironment(indexUrl)));
@@ -267,13 +234,7 @@ async function runUvInstallWithSystemCertsRetry(
   } catch (error) {
     if (error instanceof Error && error.message.includes(UV_SYSTEM_CERTS_HINT)) {
       appendLog("runtime", "检测到 TLS 证书错误，使用 --system-certs 重试");
-      await run(
-        uvPath,
-        ["--system-certs", ...args],
-        cwd,
-        (line) => onProgress("install-openfic", line),
-        environment,
-      );
+      await run(uvPath, ["--system-certs", ...args], cwd, (line) => onProgress("install-openfic", line), environment);
       return;
     }
     throw error;
@@ -300,10 +261,7 @@ async function runInstallWithIndexFallback(
   throw lastError;
 }
 
-export async function inspectOpenFicRuntime(
-  runtimeDir: string,
-  expectedVersion: string,
-): Promise<RuntimeIntegrityCheck> {
+export async function inspectOpenFicRuntime(runtimeDir: string, expectedVersion: string): Promise<RuntimeIntegrityCheck> {
   const venvPythonPath = getVenvPythonPath(runtimeDir);
   if (!(await pathExists(venvPythonPath))) {
     return { complete: false, message: "未找到 Python 虚拟环境" };
@@ -343,7 +301,7 @@ export async function ensureOpenFicRuntime(
   const venvPythonPath = getVenvPythonPath(runtimeDir);
   const uvPath = getUvPath(runtimeDir);
   let pypiEnvironments: Promise<NodeJS.ProcessEnv[]> | null = null;
-  const getPypiEnvironments = () => (pypiEnvironments ??= getPypiEnvironmentsBySpeed(expectedVersion));
+  const getPypiEnvironments = () => (pypiEnvironments ??= getOrderedPypiEnvironments(expectedVersion));
 
   appendLog("runtime", `开始检查 OpenFic 运行环境：${runtimeDir}`);
   await mkdir(runtimeDir, { recursive: true });
@@ -353,8 +311,7 @@ export async function ensureOpenFicRuntime(
     await rm(venvDir, { recursive: true, force: true });
   }
 
-  const venvIsUsable =
-    (await pathExists(venvPythonPath)) && Boolean(await readOutput(venvPythonPath, ["--version"], runtimeDir));
+  const venvIsUsable = (await pathExists(venvPythonPath)) && Boolean(await readOutput(venvPythonPath, ["--version"], runtimeDir));
   if (!venvIsUsable) {
     appendLog("runtime", "虚拟环境不存在或不可用，开始创建");
     await rm(venvDir, { recursive: true, force: true });
@@ -381,13 +338,9 @@ export async function ensureOpenFicRuntime(
   const versionCommand = createOpenFicVersionCommand(venvPythonPath);
   const installedVersion = await readOutput(versionCommand.command, versionCommand.args, runtimeDir);
   const openFicCliPath = resolveOpenFicCliPath(venvPythonPath);
-  const openFicCliIsUsable =
-    (await pathExists(openFicCliPath)) && (await succeeds(openFicCliPath, ["--help"], runtimeDir));
+  const openFicCliIsUsable = (await pathExists(openFicCliPath)) && (await succeeds(openFicCliPath, ["--help"], runtimeDir));
   if (installedVersion !== expectedVersion || !openFicCliIsUsable) {
-    appendLog(
-      "runtime",
-      installedVersion ? `OpenFic 后端需要更新：${installedVersion} -> ${expectedVersion}` : "OpenFic 后端尚未安装",
-    );
+    appendLog("runtime", installedVersion ? `OpenFic 后端需要更新：${installedVersion} -> ${expectedVersion}` : "OpenFic 后端尚未安装");
     onProgress("install-openfic", installedVersion ? "更新 OpenFic 后端" : "安装 OpenFic 后端");
     const packageIndexEnvironments = await getPypiEnvironments();
     const installCommand = createOpenFicInstallCommand(
@@ -580,6 +533,7 @@ export async function startLocalOpenFicBackend(
   startupProgress?: StartupProgressTracker,
   signal?: AbortSignal,
   dataDir?: string,
+  accessKey?: string,
 ): Promise<{ handle: BackendProcessHandle; maintenanceError: string | null }> {
   throwIfAborted(signal);
   startupProgress?.begin({
@@ -600,7 +554,10 @@ export async function startLocalOpenFicBackend(
     args: command.args,
     port,
     dataDir,
-    environment: proxyEnvironment,
+    environment: {
+      ...proxyEnvironment,
+      OPENFIC_AUTH_PASSWORD: accessKey ?? "",
+    },
     onOutputLine: (line) => {
       const progress = matchStartupLogLine(line);
       if (!progress) return;

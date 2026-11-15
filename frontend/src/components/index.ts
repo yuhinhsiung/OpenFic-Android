@@ -50,3 +50,4 @@ export type { UnitTextFieldProps } from "./unit-text-field";
 export { SafeNumberFlow } from "./number-flow-safe";
 export { StepperNumberInput } from "./stepper-number-input";
 export type { StepperNumberInputProps } from "./stepper-number-input";
+export { InfoTooltip } from "./info-tooltip";
