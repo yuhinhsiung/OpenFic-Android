@@ -31,6 +31,13 @@ val packagedFrontendDir = layout.projectDirectory.dir("src/main/assets/www")
 val copyFrontendDist by tasks.registering(Copy::class) {
     from(frontendDist)
     into(packagedFrontendDir)
+    // The task already wipes and re-copies the whole tree in doFirst, so incremental state
+    // buys nothing — and it actively breaks on this checkout: `frontend/dist` sits under a
+    // cloud-sync folder, where freshly written files are placeholders carrying a Windows
+    // reparse point. Gradle refuses to snapshot those ("not a regular file") and fails the
+    // build. Without state tracking the copy still works, because reading a placeholder
+    // hydrates it.
+    doNotTrackState("frontend/dist may contain cloud-sync placeholder files")
     doFirst {
         val index = frontendDist.file("index.html").asFile
         if (!index.isFile) {
@@ -66,8 +73,8 @@ android {
         applicationId = "com.openfic.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.12.0"
+        versionCode = 6
+        versionName = "0.13.0"
         resourceConfigurations += listOf("zh", "en")
     }
 
